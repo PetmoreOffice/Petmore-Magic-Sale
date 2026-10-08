@@ -1,0 +1,382 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* โหมดมืดตามการตั้งค่าเครื่อง (ไม่ใช้คลาส .dark) */
+@custom-variant dark (@media (prefers-color-scheme: dark));
+
+/* ธีม Magic × ร้านอาหารสัตว์: ท้องฟ้ายามค่ำ (brand) + ประกายทอง (star) + คาราเมลเม็ดอาหาร (kibble)
+   มือถือ/Handheld ก่อน: ปุ่มและช่องกรอกสูงอย่างน้อย 48px กดด้วยนิ้วโป้งได้
+   --pm-* คือสีต้นฉบับของธีม ส่วน token ของ shadcn (--background, --primary ฯลฯ) อ้างจาก --pm-* ทั้งหมด
+   เปลี่ยนสีที่ --pm-* ที่เดียว ทั้งหน้าจอเดิมและคอมโพเนนต์ shadcn จะเปลี่ยนตาม */
+:root {
+  --pm-bg: #f5f2fb;
+  --pm-surface: #ffffff;
+  --pm-ink: #24183a;
+  --pm-muted: #6c6082;
+  --pm-line: #e3dcef;
+  --pm-input: #d6cce8;
+  --pm-accent: #5b3fa0;
+  --pm-accent-ink: #ffffff;
+  --pm-accent-soft: #eee8fa;
+  --pm-brand: #241a3d;
+  --pm-brand-ink: #f6f1ff;
+  --pm-brand-soft: #33275a;
+  --pm-star: #f2c14e;
+  --pm-star-soft: #fbf1d9;
+  --pm-star-ink: #8f6410;
+  /* ตัวอักษรบนพื้นทองทึบ (ป้ายจำนวน ขั้นตอนปัจจุบัน) เข้มเท่ากันทั้งสองโหมด */
+  --pm-on-star: #2b1d04;
+  /* ตัวอักษร เส้น และพื้นโปร่งบนท้องฟ้ายามค่ำ (MagicStage, เวทีสแกน, แถบล่าง) ขาวเท่ากันทั้งสองโหมด ใช้ on-sky/10 ฯลฯ */
+  --pm-on-sky: #ffffff;
+  /* เงาของธีม: สีท้องฟ้ายามค่ำโหมดสว่าง ใช้ทั้งสองโหมด (ผ่าน shadow-lift / shadow-stage / shadow-dock) */
+  --pm-shadow: #241a3d;
+  --pm-kibble: #a8622a;
+  --pm-mint: #17765f;
+  /* โทนหมวดสินค้า/ขนาดบรรจุ (หน้าออเดอร์): คู่ พื้นอ่อน + ตัวอักษร ผ่าน 4.5:1 ทั้งสองโหมด */
+  --pm-kibble-soft: #f7e8da;
+  /* คาราเมลเข้มขึ้นสำหรับตัวอักษรเล็กบนพื้นอ่อน (kibble เดิมได้แค่ 4:1) */
+  --pm-kibble-ink: #87491a;
+  --pm-mint-soft: #dcf2ea;
+  --pm-rose: #a63a63;
+  --pm-rose-soft: #fae3ec;
+  --pm-sky: #2c64a3;
+  --pm-sky-soft: #e1edf9;
+  --pm-plum-soft: #ece4fb;
+  --pm-ok-bg: #e2f5ee;
+  --pm-ok-ink: #1d6b55;
+  --pm-err-bg: #fff0eb;
+  --pm-err-ink: #973c2b;
+  --pm-warn-bg: #fff4e0;
+  --pm-warn-ink: #8a5300;
+  /* สีที่เป็นตัวอักษรทุกสีผ่าน 4.5:1 บนพื้นหลังของตัวเองทั้งสองโหมด (ตรวจด้วย /impeccable audit) */
+  --pm-font: 'Anuphan', Tahoma, system-ui, sans-serif;
+  --pm-font-display: 'Mitr', 'Anuphan', Tahoma, sans-serif;
+  color-scheme: light;
+
+  --background: var(--pm-bg);
+  --foreground: var(--pm-ink);
+  --card: var(--pm-surface);
+  --card-foreground: var(--pm-ink);
+  --popover: var(--pm-surface);
+  --popover-foreground: var(--pm-ink);
+  --primary: var(--pm-accent);
+  --primary-foreground: var(--pm-accent-ink);
+  --secondary: var(--pm-accent-soft);
+  --secondary-foreground: var(--pm-ink);
+  --muted: var(--pm-accent-soft);
+  --muted-foreground: var(--pm-muted);
+  --accent: var(--pm-star-soft);
+  --accent-foreground: var(--pm-ink);
+  --destructive: var(--pm-err-ink);
+  --border: var(--pm-line);
+  --input: var(--pm-input);
+  --ring: var(--pm-star);
+  --chart-1: var(--pm-accent);
+  --chart-2: var(--pm-star);
+  --chart-3: var(--pm-kibble);
+  --chart-4: var(--pm-mint);
+  --chart-5: var(--pm-muted);
+  --radius: 0.75rem;
+  --sidebar: var(--pm-brand);
+  --sidebar-foreground: var(--pm-brand-ink);
+  --sidebar-primary: var(--pm-star);
+  --sidebar-primary-foreground: var(--pm-brand);
+  --sidebar-accent: var(--pm-brand-soft);
+  --sidebar-accent-foreground: var(--pm-brand-ink);
+  --sidebar-border: var(--pm-brand-soft);
+  --sidebar-ring: var(--pm-star);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pm-bg: #141020;
+    --pm-surface: #1e1830;
+    --pm-ink: #efe9fb;
+    --pm-muted: #a79cbd;
+    --pm-line: #342b4a;
+    --pm-input: #43375e;
+    --pm-accent: #b9a0f0;
+    --pm-accent-ink: #1a1328;
+    --pm-accent-soft: #2c2342;
+    --pm-brand: #0d0a17;
+    --pm-brand-soft: #241b3a;
+    --pm-star-soft: #3a2f17;
+    --pm-star-ink: #f2c14e;
+    --pm-kibble: #e0a26a;
+    --pm-mint: #6fd3b6;
+    --pm-kibble-soft: #3a2716;
+    --pm-kibble-ink: #e8b07c;
+    --pm-mint-soft: #12312a;
+    --pm-rose: #f39ac0;
+    --pm-rose-soft: #3b1a29;
+    --pm-sky: #8cc3ff;
+    --pm-sky-soft: #152a42;
+    --pm-plum-soft: #2e2448;
+    --pm-ok-bg: #173527;
+    --pm-ok-ink: #8fe0b5;
+    --pm-err-bg: #3d1d17;
+    --pm-err-ink: #ffb4a3;
+    --pm-warn-bg: #3a2a10;
+    --pm-warn-ink: #f2c879;
+    color-scheme: dark;
+  }
+}
+
+@theme inline {
+  --font-sans: var(--pm-font);
+  --font-heading: var(--pm-font-display);
+  --color-brand: var(--pm-brand);
+  --color-brand-foreground: var(--pm-brand-ink);
+  --color-star: var(--pm-star);
+  --color-star-soft: var(--pm-star-soft);
+  --color-star-ink: var(--pm-star-ink);
+  --color-on-star: var(--pm-on-star);
+  --color-on-sky: var(--pm-on-sky);
+  /* lift = การ์ดลอยตอน hover, stage = เวทีท้องฟ้า, dock = แถบล่างติดขอบจอ */
+  --shadow-lift: 0 12px 28px -16px color-mix(in oklab, var(--pm-shadow) 50%, transparent);
+  --shadow-stage: 0 10px 30px -12px color-mix(in oklab, var(--pm-shadow) 55%, transparent);
+  --shadow-dock: 0 -8px 24px -8px color-mix(in oklab, var(--pm-shadow) 50%, transparent);
+  --color-kibble: var(--pm-kibble);
+  --color-mint: var(--pm-mint);
+  --color-kibble-soft: var(--pm-kibble-soft);
+  --color-kibble-ink: var(--pm-kibble-ink);
+  --color-mint-soft: var(--pm-mint-soft);
+  --color-rose: var(--pm-rose);
+  --color-rose-soft: var(--pm-rose-soft);
+  --color-sky: var(--pm-sky);
+  --color-sky-soft: var(--pm-sky-soft);
+  --color-plum: var(--pm-accent);
+  --color-plum-soft: var(--pm-plum-soft);
+  /* StarBorder ของ React Bits: ดาวทองวิ่งรอบขอบปุ่มบันทึกออเดอร์ */
+  --animate-star-movement-bottom: star-movement-bottom linear infinite alternate;
+  --animate-star-movement-top: star-movement-top linear infinite alternate;
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-foreground: var(--foreground);
+  --color-background: var(--background);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  button:not(:disabled), [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+  html {
+    @apply font-sans;
+    /* ส่วนที่เบราว์เซอร์วาดเอง ใช้สีธีมด้วย: แถบเลื่อน และช่องติ๊ก */
+    scrollbar-color: var(--pm-input) transparent;
+    accent-color: var(--pm-accent);
+  }
+  ::selection {
+    background-color: color-mix(in oklab, var(--pm-star) 45%, transparent);
+    color: var(--foreground);
+  }
+  input,
+  textarea {
+    caret-color: var(--pm-accent);
+  }
+}
+
+/* หน้าเข้าสู่ระบบ: ดาวนิ่งจาก CSS เป็นพื้นหลังสำรอง ใช้เมื่อเครื่องไม่แสดงท้องฟ้าเคลื่อนไหว (ลดการเคลื่อนไหว / ไม่มี WebGL / เครื่องสเปกต่ำ) */
+@layer components {
+  .login {
+    min-height: 100vh;
+    display: grid;
+    place-items: center;
+    padding: 24px 16px;
+    background-color: var(--pm-brand);
+    background-image:
+      radial-gradient(1.5px 1.5px at 12% 18%, var(--pm-star) 50%, transparent 51%),
+      radial-gradient(1px 1px at 28% 72%, #fff 50%, transparent 51%),
+      radial-gradient(1.5px 1.5px at 46% 34%, #fff 50%, transparent 51%),
+      radial-gradient(1px 1px at 64% 12%, #fff 50%, transparent 51%),
+      radial-gradient(2px 2px at 82% 58%, var(--pm-star) 50%, transparent 51%),
+      radial-gradient(1px 1px at 90% 86%, #fff 50%, transparent 51%),
+      radial-gradient(1px 1px at 8% 90%, #fff 50%, transparent 51%);
+  }
+}
+
+/* เวทีสแกน (ScanInput): ดาวเลื่อนช้าๆ + เลเซอร์ทอง + แสงตอบรับ
+   ใช้ transform/opacity เท่านั้น ให้การ์ดจอทำงาน ไม่ทำให้ Handheld หน่วง */
+@layer components {
+  .scan-stage-stars {
+    position: absolute;
+    inset: -1260px 0 0 0; /* สูงกว่าเวที 1 รอบลาย (1260 = ค.ร.น. ของ 90 และ 140) เลื่อนวนได้ไม่สะดุด */
+    z-index: -1;
+    pointer-events: none;
+    background-image:
+      radial-gradient(1.5px 1.5px at 20px 30px, var(--pm-star) 50%, transparent 51%),
+      radial-gradient(1px 1px at 70px 75px, rgb(255 255 255 / 0.8) 50%, transparent 51%),
+      radial-gradient(1px 1px at 40px 110px, rgb(255 255 255 / 0.5) 50%, transparent 51%),
+      radial-gradient(2px 2px at 115px 20px, color-mix(in oklab, var(--pm-star) 70%, transparent) 50%, transparent 51%);
+    background-size: 90px 90px, 90px 90px, 140px 140px, 140px 140px;
+    animation: stage-drift 120s linear infinite;
+    will-change: transform;
+  }
+  .scan-laser {
+    position: absolute;
+    inset-inline: 10px;
+    top: calc(50% - 6px);
+    height: 12px;
+    pointer-events: none;
+    border-radius: 999px;
+    /* เส้นกลางคม 2px กับแสงจางสองข้าง วาดด้วย gradient แทนเงาเรือง */
+    background:
+      linear-gradient(90deg, transparent, var(--pm-star) 20%, var(--pm-star) 80%, transparent) center / 100% 2px no-repeat,
+      linear-gradient(180deg, transparent, color-mix(in oklab, var(--pm-star) 30%, transparent) 50%, transparent);
+    animation: scan-laser 1.8s ease-in-out infinite;
+  }
+}
+
+@keyframes stage-drift {
+  to {
+    transform: translateY(1260px);
+  }
+}
+@keyframes scan-laser {
+  0%,
+  100% {
+    transform: translateY(-14px);
+    opacity: 0.35;
+  }
+  50% {
+    transform: translateY(14px);
+    opacity: 1;
+  }
+}
+@keyframes scan-flash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes scan-shake-a {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(3px); }
+}
+@keyframes scan-shake-b {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-7px); }
+  40% { transform: translateX(7px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(3px); }
+}
+@keyframes star-movement-bottom {
+  0% { transform: translate(0%, 0%); opacity: 1; }
+  100% { transform: translate(-100%, 0%); opacity: 0; }
+}
+@keyframes star-movement-top {
+  0% { transform: translate(0%, 0%); opacity: 1; }
+  100% { transform: translate(100%, 0%); opacity: 0; }
+}
+/* ป้ายจำนวนในตะกร้าเด้งเมื่อหยิบของเพิ่ม */
+@keyframes cart-bump {
+  0% { transform: scale(1); }
+  35% { transform: scale(1.35); }
+  100% { transform: scale(1); }
+}
+/* โลโก้หน้าเข้าสู่ระบบลอยขึ้นลงเบาๆ */
+@keyframes magic-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* พิมพ์ป้าย Location: A4 แนวตั้ง ขอบ 10 มม. ป้ายกว้าง 190 มม. หน้าละ 3 ป้าย
+   พื้นขาวเสมอแม้เครื่องอยู่โหมดมืด และไม่พิมพ์ส่วนอื่นของแอป */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .label-page {
+    gap: 5mm;
+    break-after: page;
+  }
+  .label-page:last-child {
+    break-after: auto;
+  }
+  .label-sheet article {
+    width: 190mm;
+    /* แถบสีดำในป้าย (ป้ายคลัง) ต้องพิมพ์ออกมาด้วย */
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  /* เอกสารที่พิมพ์ (ใบออเดอร์ ใบคืน) ขาว-ดำเสมอ ใส่ data-print-doc ที่การ์ดของเอกสาร */
+  [data-print-doc] {
+    --card: #fff;
+    --card-foreground: #000;
+    --muted-foreground: #444;
+    --border: #ccc;
+    box-shadow: none !important;
+  }
+}
+
+/* ลดการเคลื่อนไหว: ผลลัพธ์ทุกอย่างยังเห็นจากสี กรอบ และข้อความ แอนิเมชันเป็นแค่ส่วนเสริม */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+  /* ไอคอนกำลังโหลด: ไม่หมุน แต่ยังจางเข้า-ออกช้าๆ ให้รู้ว่าระบบยังทำงานอยู่ (กฎด้านบนจะหยุดมันนิ่ง) */
+  .animate-spin {
+    animation: pm-busy 1.6s ease-in-out infinite !important;
+  }
+}
+@keyframes pm-busy {
+  50% {
+    opacity: 0.35;
+  }
+}

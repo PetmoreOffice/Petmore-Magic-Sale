@@ -1,0 +1,453 @@
+<title>PET MORE WMS UML</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Thai:wght@400;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: single reading column, sticky section index on wide screens, diagrams in scrollable frames. Palette follows the app's own purple (#392650 / #7952bc). */
+:root{
+  --bg:#f7f4fb; --surface:#ffffff; --ink:#2b1d3d; --muted:#6f6480; --line:#e2d8ee; --accent:#7952bc; --accent-soft:#efe7fa;
+  --ok:#1c7757; --warn:#9a5b12;
+  --f-body:"IBM Plex Sans Thai",Tahoma,system-ui,sans-serif; --f-mono:"IBM Plex Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#18121f; --surface:#221a2c; --ink:#ece4f7; --muted:#a99cbb; --line:#3a2f48; --accent:#b493ea; --accent-soft:#2e2340; --ok:#6fcf9f; --warn:#e7b26a; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#18121f; --surface:#221a2c; --ink:#ece4f7; --muted:#a99cbb; --line:#3a2f48; --accent:#b493ea; --accent-soft:#2e2340; --ok:#6fcf9f; --warn:#e7b26a; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:15px/1.7 var(--f-body);padding:0 16px}
+.wrap{max-width:1100px;margin:0 auto;padding-block:40px 80px;display:grid;grid-template-columns:200px minmax(0,1fr);gap:40px}
+nav{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px);align-self:start;display:flex;flex-direction:column;gap:4px;font-size:13px}
+nav a{color:var(--muted);text-decoration:none;padding:4px 10px;border-left:2px solid var(--line)}
+nav a:hover,nav a:focus-visible{color:var(--accent);border-color:var(--accent);outline:none}
+header{grid-column:1/-1;display:flex;flex-direction:column;gap:6px}
+.eyebrow{font:600 11px var(--f-mono);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:32px;line-height:1.3;margin:0;text-wrap:balance}
+h2{font-size:21px;margin:0;text-wrap:balance}
+p{margin:0;max-width:68ch}
+.muted{color:var(--muted)}
+main{display:flex;flex-direction:column;gap:56px;min-width:0}
+section{display:flex;flex-direction:column;gap:14px;min-width:0;scroll-margin-top:24px}
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;overflow-x:auto}
+.diagram pre.mermaid{margin:0;background:transparent;min-width:640px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:12px var(--f-mono);background:var(--accent-soft);color:var(--ink);padding:3px 9px;border-radius:6px}
+.note{border-left:3px solid var(--warn);padding:10px 14px;background:var(--surface);font-size:14px}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:12px}
+th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+td code{font:12.5px var(--f-mono);color:var(--accent)}
+tr:last-child td{border-bottom:0}
+@media (max-width:820px){.wrap{grid-template-columns:minmax(0,1fr)}nav{position:static;flex-direction:row;flex-wrap:wrap}nav a{border-left:0;border-bottom:2px solid var(--line)}}
+</style>
+
+<div class="wrap">
+<header>
+  <span class="eyebrow">OMS (gs.) · Google Apps Script Web App</span>
+  <h1>PET MORE WMS — แผนภาพ UML</h1>
+  <p class="muted">สรุปจากไฟล์ <code>OMS (gs.).txt</code> (หน้าเว็บ HTML ฝั่ง client ~3,200 บรรทัด) ที่เรียกฟังก์ชันฝั่งเซิร์ฟเวอร์ 32 ตัวผ่าน <code>google.script.run</code></p>
+</header>
+
+<nav aria-label="สารบัญ">
+  <a href="#overview">ภาพรวมระบบ</a>
+  <a href="#usecase">Use Case</a>
+  <a href="#class">Class Diagram</a>
+  <a href="#seq-login">Sequence: Login</a>
+  <a href="#seq-receive">Sequence: รับสินค้า</a>
+  <a href="#seq-move">Sequence: ย้าย Location</a>
+  <a href="#state">State: หน้าจอ</a>
+  <a href="#api">ตาราง API</a>
+</nav>
+
+<main>
+<div class="note">ไฟล์นี้มีเฉพาะโค้ดฝั่งหน้าเว็บ (Index.html) ส่วนโค้ด <code>.gs</code> ฝั่งเซิร์ฟเวอร์ไม่ได้อยู่ในไฟล์ แผนภาพฝั่งเซิร์ฟเวอร์และโครงสร้างข้อมูลจึงอนุมานจาก payload ที่หน้าเว็บส่งและรับ ส่วนชื่อชีตจริงใน Google Sheets ไม่ปรากฏในไฟล์</div>
+
+<section id="overview">
+  <span class="eyebrow">Component Diagram</span>
+  <h2>ภาพรวมสถาปัตยกรรม</h2>
+  <p>หน้าเว็บเป็น Single Page App ที่สลับ panel 21 หน้าจอ ทุกคำสั่งผ่านตัวช่วย <code>call(fn, token, …)</code> และก่อนทุก action จะตรวจ session ซ้ำ (<code>refreshIdentity</code>) รวมทั้งตรวจสิทธิ์ทุก 60 วินาที</p>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  subgraph Browser["เบราว์เซอร์ (Index.html)"]
+    UI["SPA · 21 panels<br/>screen(name)"]
+    Auth["Session<br/>sessionStorage token · หมดอายุ 12 ชม."]
+    Call["call(fn, ...args)<br/>Promise wrapper"]
+    Libs["ไลบรารีฝังในไฟล์<br/>SheetJS · JsBarcode · qrcode"]
+    LS["localStorage<br/>งานนำเข้าสินค้าค้าง"]
+  end
+  subgraph GAS["Google Apps Script (.gs — ไม่อยู่ในไฟล์)"]
+    API["Server functions ×32"]
+    Perm["ตรวจ token + permission<br/>+ warehouseScope"]
+    Idem["Idempotency<br/>requestId + revision"]
+  end
+  Sheets[("Google Sheets<br/>ข้อมูล WMS")]
+  UI --> Call
+  Auth --> Call
+  UI --> Libs
+  UI --> LS
+  Call -- "google.script.run" --> API
+  API --> Perm --> Idem --> Sheets
+  </pre></div>
+</section>
+
+<section id="usecase">
+  <span class="eyebrow">Use Case Diagram</span>
+  <h2>ผู้ใช้และสิ่งที่ทำได้ตามสิทธิ์</h2>
+  <p>สิทธิ์เป็นรายข้อ (permission keys) ไม่ผูกกับตำแหน่งตายตัว ตำแหน่ง (role) ใช้เป็นแค่ค่าเริ่มต้น เช่น <code>WH</code></p>
+  <div class="chips">
+    <span class="chip">receive.view</span><span class="chip">receive.create</span><span class="chip">receive.print</span>
+    <span class="chip">stock.view</span><span class="chip">stock.print</span><span class="chip">move.view</span><span class="chip">move.create</span>
+    <span class="chip">products.manage</span><span class="chip">locations.view</span><span class="chip">locations.edit</span><span class="chip">locations.print</span>
+    <span class="chip">locations.manage</span><span class="chip">users.view</span><span class="chip">users.manage</span><span class="chip">users.audit</span>
+  </div>
+  <div class="diagram"><pre class="mermaid">
+flowchart LR
+  Setup(["ผู้ติดตั้งระบบ"])
+  Staff(["พนักงานคลัง"])
+  Admin(["ผู้จัดการ / Admin"])
+  subgraph WMS["PET MORE WMS"]
+    UC0(["สร้างบัญชีผู้จัดการคนแรก"])
+    UC1(["เข้าสู่ระบบ / ออกจากระบบ"])
+    UC2(["รับสินค้า RECEIVE / OPENING"])
+    UC3(["พิมพ์ใบรับสินค้า"])
+    UC4(["ดูสต็อก · Movement"])
+    UC5(["ย้าย Location"])
+    UC6(["จัดการทะเบียนสินค้า"])
+    UC7(["นำเข้าสินค้าจาก Excel"])
+    UC8(["จัดการโซน / Location"])
+    UC9(["พิมพ์ป้าย Location<br/>QR + Barcode"])
+    UC10(["จัดการทะเบียนคลัง"])
+    UC11(["จัดการผู้ใช้และสิทธิ์"])
+    UC12(["ดูประวัติการแก้ไข"])
+  end
+  Setup --> UC0
+  Staff --> UC1
+  Staff --> UC2
+  Staff --> UC3
+  Staff --> UC4
+  Staff --> UC5
+  Staff --> UC9
+  Admin --> UC1
+  Admin --> UC6
+  Admin --> UC7
+  Admin --> UC8
+  Admin --> UC10
+  Admin --> UC11
+  Admin --> UC12
+  UC7 -. "include" .-> UC6
+  UC9 -. "extend" .-> UC8
+  </pre></div>
+</section>
+
+<section id="class">
+  <span class="eyebrow">Class Diagram</span>
+  <h2>โครงสร้างข้อมูล (Domain Model)</h2>
+  <p>ทุก entity ที่แก้ไขได้มี <code>revision</code> สำหรับกันการบันทึกทับกัน และทุกคำสั่งเขียนแนบ <code>requestId</code> (UUID) เพื่อกันกดซ้ำ</p>
+  <div class="diagram"><pre class="mermaid">
+classDiagram
+  direction LR
+  class User {
+    +string username
+    +string displayName
+    +string roleCode
+    +string role
+    +bool active
+    +string[] permissions
+    +WarehouseScope warehouseScope
+    +int revision
+  }
+  class WarehouseScope {
+    +bool all
+    +string[] codes
+  }
+  class Session {
+    +string token
+    +bool valid
+    +number expiresAt
+    +string version
+    +string system
+  }
+  class AccessCatalog {
+    +map roles
+    +PermissionGroup[] groups
+    +map defaults
+  }
+  class Warehouse {
+    +string code
+    +string name
+    +WarehouseKind kind
+    +bool active
+    +int revision
+  }
+  class WarehouseKind {
+    &lt;&lt;enumeration&gt;&gt;
+    WAREHOUSE
+    BACKROOM
+    STOREFRONT
+  }
+  class Zone {
+    +string id
+    +string warehouse
+    +string code
+    +string name
+    +bool active
+    +int revision
+  }
+  class Location {
+    +string id
+    +string warehouse
+    +string zoneId
+    +string code
+    +string name
+    +bool active
+    +int revision
+  }
+  class Product {
+    +string id (SKU)
+    +string name
+    +string barcode
+    +string unit
+    +bool active
+    +bool expiryRequired
+    +int revision
+  }
+  class Receipt {
+    +string id
+    +ReceiptKind kind
+    +string warehouse
+    +date date
+    +string reference
+    +string poNumber
+    +string source
+    +string note
+    +string requestId
+  }
+  class ReceiptKind {
+    &lt;&lt;enumeration&gt;&gt;
+    RECEIVE
+    OPENING
+  }
+  class ReceiptLine {
+    +string sku
+    +string locationId
+    +number qty
+    +string lot
+    +date expiry
+    +StockStatus status
+  }
+  class StockStatus {
+    &lt;&lt;enumeration&gt;&gt;
+    FG สินค้าปกติ
+    DM เสียหาย/รอตรวจ
+  }
+  class StockRow {
+    +string warehouse
+    +string sku
+    +string locationId
+    +string locationCode
+    +string lot
+    +date expiry
+    +StockStatus status
+    +number qty
+  }
+  class Move {
+    +string id
+    +string warehouse
+    +string sourceKey
+    +string destinationId
+    +number qty
+    +string note
+    +string actor
+    +datetime time
+  }
+  class StockMovement {
+    +string id
+    +string kind
+    +int line
+    +string sku
+    +number qty
+    +string actor
+    +datetime time
+  }
+  class LabelBatch {
+    +string id
+    +string requestId
+    +string actor
+    +datetime time
+    +string[] locationIds
+  }
+  class AuditEntry {
+    +string id
+    +string actor
+    +datetime time
+    +object before
+    +object after
+  }
+
+  User "1" *-- "1" WarehouseScope
+  User "1" --> "0..*" Session : login
+  User ..> AccessCatalog : permissions จาก
+  WarehouseScope "0..*" --> "0..*" Warehouse : codes
+  Warehouse --> WarehouseKind
+  Warehouse "1" *-- "0..*" Zone
+  Zone "1" *-- "0..*" Location
+  Receipt "1" *-- "1..50" ReceiptLine
+  Receipt --> ReceiptKind
+  Receipt "0..*" --> "1" Warehouse
+  ReceiptLine "0..*" --> "1" Product
+  ReceiptLine "0..*" --> "1" Location
+  ReceiptLine --> StockStatus
+  StockRow "0..*" --> "1" Product
+  StockRow "0..*" --> "1" Location
+  StockRow --> StockStatus
+  Move "0..*" --> "1" StockRow : ต้นทาง
+  Move "0..*" --> "1" Location : ปลายทาง
+  StockMovement ..> Receipt : RECEIVE/OPENING
+  StockMovement ..> Move : MOVE
+  LabelBatch "0..*" --> "1..*" Location
+  AuditEntry ..> User
+  AuditEntry ..> Product
+  AuditEntry ..> Zone
+  AuditEntry ..> Location
+  </pre></div>
+</section>
+
+<section id="seq-login">
+  <span class="eyebrow">Sequence Diagram</span>
+  <h2>เข้าสู่ระบบและตรวจสิทธิ์ต่อเนื่อง</h2>
+  <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor U as ผู้ใช้
+  participant P as หน้าเว็บ (SPA)
+  participant S as sessionStorage
+  participant G as Apps Script
+  U->>P: เปิด URL
+  P->>S: readToken()
+  alt มี token เดิม
+    P->>G: getSession(token)
+    G-->>P: {valid, user, expiresAt, version}
+  else ไม่มี token
+    P-->>U: แสดงฟอร์ม Login
+    U->>P: username + password
+    P->>G: login(username, password)
+    G-->>P: {token, user, expiresAt, version, system}
+    P->>P: checkVersion() ต้องตรง CONFIG
+    P->>S: remember(token)
+  end
+  P->>G: getAccessCatalog(token)
+  G-->>P: roles, groups, defaults
+  P->>P: renderAccess() ซ่อน/แสดงเมนูตาม permission
+  loop ทุก 60 วินาที และเมื่อกลับมาที่แท็บ
+    P->>G: getSession(token)
+    G-->>P: สิทธิ์ล่าสุด
+    P->>P: renderAccess() ถ้าสิทธิ์ถูกถอน เด้งกลับเมนูหลัก
+  end
+  Note over P: setTimeout ครบ expiresAt (12 ชม.) → ล้าง token แล้วกลับหน้า Login
+  </pre></div>
+</section>
+
+<section id="seq-receive">
+  <span class="eyebrow">Sequence Diagram</span>
+  <h2>รับสินค้าเข้าคลัง (postReceipt)</h2>
+  <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor U as พนักงานคลัง
+  participant P as หน้าเว็บ
+  participant G as Apps Script
+  participant D as Google Sheets
+  U->>P: + สร้างใบรับสินค้า
+  P->>G: getSession(token)
+  P->>G: getReceivingSetup(token)
+  G-->>P: warehouses, zones, locations, products
+  loop เพิ่มได้สูงสุด 50 รายการ
+    U->>P: สแกน SKU/บาร์โค้ด · Location · qty · lot · expiry · FG/DM
+    P->>P: addReceiptLine() ตรวจวันหมดอายุถ้า expiryRequired
+  end
+  U->>P: บันทึก (ยืนยันในกล่อง confirm)
+  P->>P: สร้าง requestId (UUID) ครั้งเดียวต่อข้อมูลชุดเดิม
+  P->>G: postReceipt(token, {warehouse, kind, date, reference, poNumber, source, note, lines, requestId})
+  G->>D: ตรวจสิทธิ์ receive.create + warehouseScope
+  G->>D: บันทึกใบรับ + เพิ่มยอดสต็อก + บันทึก Movement
+  G-->>P: {receipt}
+  P-->>U: showReceipt() แสดงใบรับ
+  opt มีสิทธิ์ receive.print
+    U->>P: พิมพ์ / บันทึก PDF
+    P->>G: getReceipt(token, id, true)
+    P->>P: window.print()
+  end
+  </pre></div>
+</section>
+
+<section id="seq-move">
+  <span class="eyebrow">Sequence Diagram</span>
+  <h2>ย้าย Location ภายในคลัง (postMove)</h2>
+  <div class="diagram"><pre class="mermaid">
+sequenceDiagram
+  autonumber
+  actor U as พนักงานคลัง
+  participant P as หน้าเว็บ
+  participant G as Apps Script
+  U->>P: ย้ายสินค้า
+  P->>G: getMoveSetup(token)
+  G-->>P: stock[], locations[]
+  U->>P: เลือกสต็อกต้นทาง (SKU / ล็อต / Location / สถานะ)
+  P->>P: moveKey() = [warehouse, sku, locationId, lot, expiry, status]
+  U->>P: เลือกปลายทาง + จำนวน (0 &lt; qty ≤ คงเหลือ)
+  P->>G: postMove(token, {warehouse, sourceKey, destinationId, qty, note, requestId})
+  G-->>P: Move record
+  P-->>U: showMove() รายละเอียดการย้าย
+  </pre></div>
+</section>
+
+<section id="state">
+  <span class="eyebrow">State Diagram</span>
+  <h2>การเปลี่ยนหน้าจอ</h2>
+  <p>ทุกการเปลี่ยนหน้าผ่าน <code>navigate()</code> ซึ่งถามก่อนออกถ้าฟอร์มยังไม่บันทึก (<code>formDirty</code>)</p>
+  <div class="diagram"><pre class="mermaid">
+stateDiagram-v2
+  [*] --> Login
+  Login --> menu : login สำเร็จ
+  menu --> receipts
+  receipts --> receiveEditor : + สร้างใบรับ
+  receiveEditor --> receiptDetail : postReceipt
+  receipts --> receiptDetail : เปิด
+  menu --> stock
+  stock --> movement : Movement
+  menu --> moves
+  moves --> moveEditor
+  moveEditor --> moveDetail : postMove
+  menu --> products
+  products --> productEditor
+  products --> productImport
+  menu --> storage
+  storage --> storageEditor
+  storage --> labels : เตรียมป้าย
+  storage --> storageHistory
+  menu --> warehouses
+  menu --> users
+  users --> editor
+  menu --> audit
+  menu --> account
+  menu --> Login : logout / หมดอายุ
+  </pre></div>
+</section>
+
+<section id="api">
+  <span class="eyebrow">Server API</span>
+  <h2>ฟังก์ชันฝั่งเซิร์ฟเวอร์ที่หน้าเว็บเรียก (32 ตัว)</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>โมดูล</th><th>ฟังก์ชัน</th><th>สิทธิ์ที่เกี่ยวข้อง</th></tr></thead>
+    <tbody>
+      <tr><td>Auth</td><td><code>createManager</code> <code>login</code> <code>logout</code> <code>getSession</code> <code>getAccessCatalog</code></td><td>—</td></tr>
+      <tr><td>ผู้ใช้</td><td><code>listUsers</code> <code>saveUser</code> <code>getUserAudit</code> <code>getWarehouseChoices</code></td><td>users.view · users.manage · users.audit</td></tr>
+      <tr><td>คลัง</td><td><code>listWarehouseRegistry</code> <code>saveWarehouse</code></td><td>locations.manage</td></tr>
+      <tr><td>โซน / Location</td><td><code>getStorageWorkspace</code> <code>saveStorageEntry</code> <code>deleteStorageEntry</code> <code>getStorageAudit</code></td><td>locations.view · locations.edit</td></tr>
+      <tr><td>ป้าย</td><td><code>prepareLocationLabels</code> <code>getLocationPrintHistory</code></td><td>locations.print</td></tr>
+      <tr><td>สินค้า</td><td><code>getProducts</code> <code>saveProduct</code> <code>setProductExpiryBulk</code> <code>previewProductImport</code> <code>commitProductImport</code></td><td>products.manage</td></tr>
+      <tr><td>รับสินค้า</td><td><code>getReceivingSetup</code> <code>postReceipt</code> <code>listReceipts</code> <code>getReceipt</code></td><td>receive.view · receive.create · receive.print</td></tr>
+      <tr><td>สต็อก</td><td><code>getStock</code> <code>getStockMovement</code></td><td>stock.view · stock.print</td></tr>
+      <tr><td>ย้าย Location</td><td><code>getMoveSetup</code> <code>postMove</code> <code>listMoveHistory</code> <code>getMove</code></td><td>move.view · move.create</td></tr>
+    </tbody>
+  </table></div>
+</section>
+</main>
+</div>

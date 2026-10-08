@@ -1,0 +1,144 @@
+<title>Petmore Magic Design Board</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mitr:wght@500;600&family=Anuphan:wght@400;500;600&family=JetBrains+Mono:wght@400&display=swap">
+<style>
+/* Layout: night-sky masthead with the app name, then a 2-column grid of bookmark cards, then the theme brief. Magic = starlight gold on deep plum; pet shop = warm kibble caramel. */
+:root{
+  --bg:#f5f2fb; --surface:#ffffff; --ink:#24183a; --muted:#6c6082; --line:#e3dcef;
+  --sky:#241a3d; --sky-ink:#f6f1ff; --gold:#b9831a; --gold-soft:#fbf1d9; --kibble:#a8622a; --mint:#17765f;
+  --f-display:"Mitr","Anuphan",Tahoma,sans-serif; --f-body:"Anuphan",Tahoma,system-ui,sans-serif; --f-mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141020; --surface:#1e1830; --ink:#efe9fb; --muted:#a79cbd; --line:#342b4a;
+  --sky:#0d0a17; --sky-ink:#f6f1ff; --gold:#f2c14e; --gold-soft:#3a2f17; --kibble:#e0a26a; --mint:#6fd3b6; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141020; --surface:#1e1830; --ink:#efe9fb; --muted:#a79cbd; --line:#342b4a;
+  --sky:#0d0a17; --sky-ink:#f6f1ff; --gold:#f2c14e; --gold-soft:#3a2f17; --kibble:#e0a26a; --mint:#6fd3b6; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:16px/1.65 var(--f-body);padding:0 16px}
+.wrap{max-width:980px;margin:0 auto;padding-block:24px 64px;display:flex;flex-direction:column;gap:36px}
+a{color:inherit}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px;border-radius:6px}
+
+.sky{position:relative;overflow:hidden;background:var(--sky);color:var(--sky-ink);border-radius:20px;padding:36px 28px 32px;display:flex;flex-direction:column;gap:10px}
+.sky canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.sky > *:not(canvas){position:relative}
+h1{font:600 clamp(32px,6vw,52px)/1.1 var(--f-display);margin:0;text-wrap:balance}
+h1 .spark{color:#f2c14e}
+.sky p{margin:0;max-width:56ch;color:#d9cff0}
+.paws{display:flex;gap:8px;margin-top:6px;flex-wrap:wrap}
+.tag{font-size:13px;padding:4px 10px;border-radius:999px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);color:#efe6ff}
+
+h2{font:600 22px var(--f-display);margin:0}
+.section{display:flex;flex-direction:column;gap:14px}
+.section > p{margin:0;color:var(--muted);max-width:68ch}
+
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.card h3{font:600 20px var(--f-display);margin:0}
+.role{font-size:12px;font-weight:600;color:var(--kibble);white-space:nowrap}
+.card p{margin:0;color:var(--muted)}
+.links{display:flex;flex-wrap:wrap;gap:0 20px;font-size:14px}
+.links a{display:inline-flex;align-items:center;min-height:44px;color:var(--ink);font-weight:600;text-decoration-color:var(--gold);text-underline-offset:3px}
+.cmd{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px 6px 6px 12px;min-width:0}
+.cmd code{font:13px var(--f-mono);overflow-x:auto;white-space:nowrap;flex:1;min-width:0}
+.copy{font:600 13px var(--f-body);border:0;border-radius:8px;padding:0 14px;min-height:44px;background:var(--gold-soft);color:var(--ink);cursor:pointer;flex:none}
+.use{font-size:14px;margin:0;padding-left:18px;color:var(--ink)}
+.use li{margin:2px 0}
+
+.palette{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.sw{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface)}
+.sw i{display:block;height:56px}
+.sw div{padding:8px 10px;font-size:13px}
+.sw b{display:block;font-size:14px}
+.sw span{font-family:var(--f-mono);color:var(--muted)}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px;margin:0;padding:0;list-style:none}
+.rules li{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:15px}
+.rules b{color:var(--mint)}
+.foot{font-size:13px;color:var(--muted)}
+@media (prefers-reduced-motion: reduce){.sky canvas{display:none}}
+</style>
+
+<div class="wrap">
+  <header class="sky">
+    <canvas id="stars" aria-hidden="true"></canvas>
+
+    <h1>Petmore <span class="spark">Magic</span> Sale</h1>
+    <p>แหล่งอ้างอิงงานออกแบบ UX/UI ของแอป ธีมเวทมนตร์ผสมร้านอาหารสัตว์ ใช้คู่กับคำสั่ง <code>/design-refs</code> ในโปรเจ็กต์</p>
+    <div class="paws"><span class="tag">ประกายดาว</span><span class="tag">ท้องฟ้ายามค่ำ</span><span class="tag">รอยเท้าสัตว์</span><span class="tag">เม็ดอาหาร</span></div>
+  </header>
+
+  <section class="section" aria-labelledby="refs">
+    <h2 id="refs">Bookmark</h2>
+    <div class="grid">
+      <article class="card">
+        <div class="card-head"><h3>React Bits</h3><span class="role">ความรู้สึก Magic</span></div>
+        <p>แอนิเมชัน React กว่า 200 แบบ ทั้งข้อความ พื้นหลัง micro-interaction และ 3D แต่ละตัวมีแบบ CSS และ Tailwind</p>
+        <ul class="use"><li>ประกายตอนสแกนหรือบันทึกสำเร็จ</li><li>พื้นหลังดาวในหน้าเข้าสู่ระบบ</li></ul>
+        <div class="cmd"><code>npx shadcn@latest add @react-bits/BlurText-TS-TW</code><button class="copy" type="button">คัดลอก</button></div>
+        <div class="links"><a href="https://github.com/DavidHDev/react-bits">GitHub</a><a href="https://reactbits.dev">ดูตัวอย่างทั้งหมด</a></div>
+      </article>
+      <article class="card">
+        <div class="card-head"><h3>shadcn/ui</h3><span class="role">โครงคอมโพเนนต์</span></div>
+        <p>คอมโพเนนต์พื้นฐานแบบคัดลอกเข้าโปรเจ็กต์ สร้างบน Radix และ Tailwind แก้หน้าตาได้ทุกจุด</p>
+        <ul class="use"><li>ฟอร์มรับสินค้า ตารางสต็อก</li><li>Dialog ยืนยัน Toast แจ้งผล</li></ul>
+        <div class="cmd"><code>npx shadcn@latest init</code><button class="copy" type="button">คัดลอก</button></div>
+        <div class="links"><a href="https://github.com/shadcn-ui/ui">GitHub</a><a href="https://ui.shadcn.com">เอกสาร</a></div>
+      </article>
+      <article class="card">
+        <div class="card-head"><h3>Vercel Templates</h3><span class="role">โครงหน้า</span></div>
+        <p>เทมเพลตเว็บแอปสำเร็จรูป ใช้ดูการจัดวางหน้า dashboard เมนู และหน้าเข้าสู่ระบบ</p>
+        <ul class="use"><li>layout หน้าจอคอม (sidebar + ตาราง)</li><li>ตัวอย่าง admin dashboard</li></ul>
+        <div class="links"><a href="https://vercel.com/templates">เปิดคลังเทมเพลต</a></div>
+      </article>
+      <article class="card">
+        <div class="card-head"><h3>Impeccable</h3><span class="role">ตรวจและขัดเกลา</span></div>
+        <p>skill ออกแบบสำหรับ AI มี 24 คำสั่ง เช่น audit, critique, polish, colorize, animate และกฎจับ anti-pattern 60 ข้อ</p>
+        <ul class="use"><li>ตรวจหน้าจอก่อนใช้งานจริง</li><li>ปรับสีและตัวอักษรให้เข้าธีม</li></ul>
+        <div class="cmd"><code>npx impeccable install</code><button class="copy" type="button">คัดลอก</button></div>
+        <div class="links"><a href="https://github.com/pbakaus/impeccable">GitHub</a></div>
+      </article>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="theme">
+    <h2 id="theme">ทิศทางธีม</h2>
+    <p>ท้องฟ้ายามค่ำสีม่วงเข้มเป็นฉาก ประกายทองเป็นเวทมนตร์ สีคาราเมลเม็ดอาหารให้ความอบอุ่นแบบร้านสัตว์เลี้ยง</p>
+    <div class="palette">
+      <div class="sw"><i style="background:#241a3d"></i><div><b>Night Sky</b><span>#241A3D</span></div></div>
+      <div class="sw"><i style="background:#f2c14e"></i><div><b>Starlight</b><span>#F2C14E</span></div></div>
+      <div class="sw"><i style="background:#c8803e"></i><div><b>Kibble</b><span>#C8803E</span></div></div>
+      <div class="sw"><i style="background:#6fd3b6"></i><div><b>Potion Mint</b><span>#6FD3B6</span></div></div>
+      <div class="sw"><i style="background:#f5f2fb"></i><div><b>Moon Mist</b><span>#F5F2FB</span></div></div>
+    </div>
+    <ul class="rules">
+      <li><b>เวทมนตร์เป็นการตอบรับ</b> ใช้ประกายเมื่อสแกนหรือบันทึกสำเร็จ ไม่โรยทั่วหน้า</li>
+      <li><b>ช่องสแกนมาก่อน</b> แอนิเมชันห้ามแย่งเคอร์เซอร์จากช่องสแกนบน Handheld</li>
+      <li><b>อ่านง่ายบนจอเล็ก</b> ปุ่มสูงอย่างน้อย 48px ตัวเลขจำนวนชัดเจน</li>
+      <li><b>เคารพผู้ใช้</b> ปิดแอนิเมชันเมื่อเครื่องตั้งค่าลดการเคลื่อนไหว</li>
+    </ul>
+  </section>
+
+  <p class="foot">บันทึกไว้ 6 ต.ค. 2569 · ชุดเดียวกันอยู่ใน CLAUDE.md และคำสั่ง /design-refs ของโปรเจ็กต์ Petmore Magic Sale OMS</p>
+</div>
+
+<script>
+document.querySelectorAll('.copy').forEach(function(btn){
+  btn.addEventListener('click',function(){
+    var code=btn.previousElementSibling, text=code.textContent;
+    function done(){btn.textContent='คัดลอกแล้ว';setTimeout(function(){btn.textContent='คัดลอก'},1500)}
+    function fallback(){var r=document.createRange();r.selectNodeContents(code);var s=getSelection();s.removeAllRanges();s.addRange(r);btn.textContent='เลือกข้อความแล้ว'}
+    try{navigator.clipboard.writeText(text).then(done,fallback)}catch(e){fallback()}
+  });
+});
+(function(){
+  var c=document.getElementById('stars'); if(!c||matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  var x=c.getContext('2d'), stars=[], w=0, h=0, dpr=Math.min(2,devicePixelRatio||1);
+  function size(){w=c.clientWidth;h=c.clientHeight;c.width=w*dpr;c.height=h*dpr;x.setTransform(dpr,0,0,dpr,0,0);
+    stars=Array.from({length:Math.round(w*h/2200)},function(){return{x:Math.random()*w,y:Math.random()*h,r:Math.random()*1.4+.3,p:Math.random()*6.28,s:.6+Math.random()*1.2}})}
+  function draw(t){x.clearRect(0,0,w,h);stars.forEach(function(s){var a=.35+.65*Math.abs(Math.sin(s.p+t/1000*s.s));x.globalAlpha=a;x.fillStyle=s.r>1.3?'#f2c14e':'#ffffff';x.beginPath();x.arc(s.x,s.y,s.r,0,6.283);x.fill()});requestAnimationFrame(draw)}
+  size(); addEventListener('resize',size); requestAnimationFrame(draw);
+})();
+</script>

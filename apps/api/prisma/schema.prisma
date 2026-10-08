@@ -1,0 +1,408 @@
+// โครงข้อมูล WMS อิงจาก Class Diagram ใน "PET MORE WMS UML"
+// ทุกตารางที่แก้ไขได้มี revision กันบันทึกทับกัน
+// ทุกคำสั่งที่เปลี่ยนสต็อกมี requestId (unique) กันกดบันทึกซ้ำ
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum WarehouseKind {
+  WAREHOUSE
+  BACKROOM
+  STOREFRONT
+}
+
+enum ReceiptKind {
+  RECEIVE
+  OPENING
+}
+
+enum StockStatus {
+  FG
+  DM
+}
+
+enum MovementKind {
+  RECEIVE
+  OPENING
+  MOVE
+}
+
+enum ProductSource {
+  LOCAL
+  COMPANY
+}
+
+model User {
+  id            String          @id @default(cuid())
+  username      String          @unique
+  displayName   String
+  passwordHash  String
+  roleCode      String
+  active        Boolean         @default(true)
+  permissions   String[]
+  allWarehouses Boolean         @default(false)
+  warehouses    UserWarehouse[]
+  sessions      Session[]
+  revision      Int             @default(0)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+}
+
+model UserWarehouse {
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  warehouse     Warehouse @relation(fields: [warehouseCode], references: [code])
+  warehouseCode String
+
+  @@id([userId, warehouseCode])
+}
+
+model Session {
+  token     String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Warehouse {
+  code      String          @id
+  name      String
+  kind      WarehouseKind   @default(WAREHOUSE)
+  active    Boolean         @default(true)
+  revision  Int             @default(0)
+  zones     Zone[]
+  locations Location[]
+  users     UserWarehouse[]
+}
+
+model Zone {
+  id            String     @id @default(cuid())
+  warehouse     Warehouse  @relation(fields: [warehouseCode], references: [code])
+  warehouseCode String
+  code          String
+  name          String
+  active        Boolean    @default(true)
+  revision      Int        @default(0)
+  locations     Location[]
+
+  @@unique([warehouseCode, code])
+}
+
+model Location {
+  id            String    @id @default(cuid())
+  warehouse     Warehouse @relation(fields: [warehouseCode], references: [code])
+  warehouseCode String
+  zone          Zone      @relation(fields: [zoneId], references: [id])
+  zoneId        String
+  code          String
+  name          String    @default("")
+  active        Boolean   @default(true)
+  revision      Int       @default(0)
+
+  @@unique([zoneId, code])
+  @@index([warehouseCode])
+}
+
+model Product {
+  sku             String        @id
+  name            String
+  barcode         String?
+  /// หน่วยนับสต็อก (SKU_S_UTQ) ยอดสต็อกทั้งหมดเก็บเป็นหน่วยนี้
+  unit            String        @default("ชิ้น")
+  /// จำนวนชิ้นต่อ 1 หน่วยนับสต็อก (UTQ_QTY) ใช้คำนวณตัวคูณของแต่ละขนาดบรรจุ
+  unitQty         Decimal       @default(1) @db.Decimal(14, 3)
+  brand           String        @default("")
+  /// หมวดย่อย / หมวดแม่ จาก ICDEPT
+  category        String        @default("")
+  categoryGroup   String        @default("")
+  active          Boolean       @default(true)
+  expiryRequired  Boolean       @default(false)
+  source          ProductSource @default(LOCAL)
+  /// ICCAT_CODE ของบริษัทคู่ค้าเจ้าของสินค้า (SKUMASTER.SKU_ICCAT) ใช้กรองสินค้าตามผู้สั่งในหน้าออเดอร์
+  customerCode    String        @default("")
+  /// SKU + ชื่อ + ยี่ห้อ ตัวพิมพ์เล็ก ตัดช่องว่างและเครื่องหมาย ใช้ค้นแบบไม่สนเว้นวรรค (สร้างด้วย searchKey() ใน shared)
+  searchKey       String        @default("")
+  companySyncedAt DateTime?
+  revision        Int           @default(0)
+  packs           ProductPack[]
+
+  @@index([barcode])
+  @@index([customerCode])
+}
+
+/// ขนาดบรรจุ/บาร์โค้ดของสินค้า (GOODSMASTER) สินค้า 1 ตัวมีได้หลายแถว เช่น ชิ้น, แพ็ค 12, ลัง 48
+model ProductPack {
+  /// GOODS_CODE: บาร์โค้ดหรือรหัสของขนาดบรรจุนี้ ไม่ซ้ำทั้งระบบ
+  code            String    @id
+  product         Product   @relation(fields: [sku], references: [sku], onDelete: Cascade)
+  sku             String
+  /// GOODS_ALIAS ถ้าว่างใช้ชื่อสินค้า
+  name            String
+  unitName        String
+  /// จำนวนชิ้นต่อ 1 หน่วยนี้ (UTQ_QTY)
+  unitQty         Decimal   @db.Decimal(14, 3)
+  /// 1 หน่วยนี้ = กี่หน่วยนับสต็อก (unitQty ÷ unitQty ของสินค้า)
+  factor          Decimal   @db.Decimal(14, 4)
+  active          Boolean   @default(true)
+  companySyncedAt DateTime?
+
+  @@index([sku])
+}
+
+/// ผู้สั่ง: บริษัทคู่ค้าจาก dbo.ICCAT ของ SQL Server บริษัท (sync อ่านอย่างเดียว ไม่รวม key 0 "ไม่กำหนดประเภท")
+model Customer {
+  /// ICCAT_CODE ไม่ซ้ำ (ตรวจ 2026-10-07: 256 รายการ)
+  code            String    @id
+  name            String
+  active          Boolean   @default(true)
+  companySyncedAt DateTime?
+}
+
+model SalesOrder {
+  id            String         @id
+  requestId     String         @unique
+  fingerprint   String
+  /// ICCAT_CODE ของผู้สั่ง ชื่อเก็บสำเนาไว้ใน customerName เผื่อชื่อในระบบบริษัทเปลี่ยนภายหลัง
+  customerCode  String         @default("")
+  customerName  String
+  customerType  String
+  phone         String         @default("")
+  channel       String         @default("")
+  date          DateTime       @db.Date
+  dueDate       String         @default("")
+  reference     String         @default("")
+  note          String         @default("")
+  createdById   String
+  createdAt     DateTime       @default(now())
+  total         Decimal        @db.Decimal(14, 2)
+  lines         OrderLine[]
+  checks        PickCheck[]
+  returns       ProductReturn[]
+  /// ผลตรวจของเบิกครั้งล่าสุด '' = ยังไม่ตรวจ, MATCH, MISMATCH (เก็บซ้ำไว้กรองรายการได้เร็ว)
+  checkStatus   String         @default("")
+
+  @@index([createdById, createdAt])
+  @@index([checkStatus, createdAt])
+}
+
+model OrderLine {
+  id         String   @id @default(cuid())
+  order      SalesOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    String
+  lineNo     Int
+  sku        String
+  /// รหัสสินค้าที่กรอกเอง (สินค้าใหม่ที่ยังไม่มีในทะเบียน) รายการจากทะเบียนเว้นว่าง ใช้ sku แทน
+  itemCode   String   @default("")
+  name       String
+  packCode   String
+  unit       String
+  qty        Decimal  @db.Decimal(14, 3)
+  unitPrice  Decimal  @db.Decimal(14, 2)
+  amount     Decimal  @db.Decimal(14, 2)
+
+  @@unique([orderId, lineNo])
+}
+
+/// ผลตรวจของที่เบิกตอนคนเบิกเอาของมาส่ง เทียบกับรายการในออเดอร์ (ตรวจซ้ำได้หลายครั้ง ใช้ครั้งล่าสุด)
+model PickCheck {
+  id          String          @id
+  requestId   String          @unique
+  order       SalesOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId     String
+  /// ชื่อคนที่เบิกของมาส่ง (อาจไม่มีบัญชีในระบบ)
+  pickerName  String          @default("")
+  /// MATCH = ครบตรงทุกรายการ, MISMATCH = ขาด/เกิน/ผิด อย่างน้อย 1 รายการ
+  status      String
+  note        String          @default("")
+  checkedById String
+  createdAt   DateTime        @default(now())
+  lines       PickCheckLine[]
+
+  @@index([orderId, createdAt])
+}
+
+model PickCheckLine {
+  id          String    @id @default(cuid())
+  check       PickCheck @relation(fields: [checkId], references: [id], onDelete: Cascade)
+  checkId     String
+  lineNo      Int
+  /// รายการในออเดอร์ที่ตรวจ ว่าง = ของที่เอามาแต่ไม่อยู่ในออเดอร์ (ผิดตัว/ผิดขนาด)
+  orderLineNo Int?
+  sku         String    @default("")
+  itemCode    String    @default("")
+  packCode    String    @default("")
+  name        String
+  unit        String
+  expectedQty Decimal   @db.Decimal(14, 3)
+  actualQty   Decimal   @db.Decimal(14, 3)
+
+  @@unique([checkId, lineNo])
+}
+
+/// ใบคืนสินค้า: คืนจากออเดอร์ที่เบิกไป (เบิกเกิน/ขายไม่หมด) หรือใบคืนอิสระ (เช่น ปิดงานอีเว้นท์)
+/// ตอนนี้บันทึกประวัติอย่างเดียว ยังไม่เปลี่ยนยอดสต็อก (การเบิกก็ยังไม่ตัดสต็อก)
+model ProductReturn {
+  id           String         @id
+  requestId    String         @unique
+  order        SalesOrder?    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  orderId      String?
+  /// OVER_PICK เบิกเกิน, UNSOLD ขายไม่หมด, EVENT_END ปิดงานอีเว้นท์, OTHER อื่นๆ
+  reason       String
+  returnerName String         @default("")
+  note         String         @default("")
+  createdById  String
+  createdAt    DateTime       @default(now())
+  lines        ReturnLine[]
+
+  @@index([orderId])
+  @@index([createdAt])
+}
+
+model ReturnLine {
+  id          String        @id @default(cuid())
+  ret         ProductReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  returnId    String
+  lineNo      Int
+  /// รายการในออเดอร์ที่คืน (ใบคืนอิสระ = ว่าง)
+  orderLineNo Int?
+  sku         String        @default("")
+  itemCode    String        @default("")
+  packCode    String        @default("")
+  name        String
+  unit        String
+  /// ของดี (FG) และของเสียหาย (DM) ในหน่วยของบรรทัดนี้
+  goodQty     Decimal       @db.Decimal(14, 3)
+  damagedQty  Decimal       @db.Decimal(14, 3)
+
+  @@unique([returnId, lineNo])
+}
+
+model Receipt {
+  id            String        @id
+  requestId     String        @unique
+  kind          ReceiptKind
+  warehouseCode String
+  date          DateTime      @db.Date
+  reference     String
+  poNumber      String        @default("")
+  source        String
+  note          String        @default("")
+  createdById   String
+  createdAt     DateTime      @default(now())
+  lines         ReceiptLine[]
+
+  @@index([warehouseCode, createdAt])
+}
+
+model ReceiptLine {
+  id         String      @id @default(cuid())
+  receipt    Receipt     @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  receiptId  String
+  lineNo     Int
+  sku        String
+  locationId String
+  /// จำนวนในหน่วยนับสต็อก (packQty × factor) ยอดที่เข้าสต็อกจริง
+  qty        Decimal     @db.Decimal(14, 3)
+  /// ขนาดบรรจุที่รับเข้า เก็บไว้ดูย้อนหลังว่ารับมากี่แพ็ค
+  packCode   String      @default("")
+  packName   String      @default("")
+  packUnit   String      @default("")
+  packQty    Decimal     @default(0) @db.Decimal(14, 3)
+  factor     Decimal     @default(1) @db.Decimal(14, 4)
+  lot        String      @default("")
+  expiry     String      @default("")
+  status     StockStatus
+
+  @@unique([receiptId, lineNo])
+}
+
+// ยอดคงเหลือ 1 แถวต่อ คลัง + สินค้า + Location + ล็อต + วันหมดอายุ + สถานะ
+// expiry เก็บเป็นข้อความ YYYY-MM-DD หรือ "" เพื่อใช้เป็นส่วนของ unique key ได้
+model StockBalance {
+  id            String      @id @default(cuid())
+  warehouseCode String
+  sku           String
+  locationId    String
+  lot           String      @default("")
+  expiry        String      @default("")
+  status        StockStatus
+  qty           Decimal     @db.Decimal(14, 3)
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([warehouseCode, sku, locationId, lot, expiry, status], name: "stockKey")
+  @@index([sku])
+  @@index([locationId])
+}
+
+model StockMovement {
+  id             String       @id @default(cuid())
+  kind           MovementKind
+  refId          String
+  lineNo         Int
+  warehouseCode  String
+  sku            String
+  fromLocationId String?
+  toLocationId   String?
+  lot            String       @default("")
+  expiry         String       @default("")
+  status         StockStatus
+  qty            Decimal      @db.Decimal(14, 3)
+  actorId        String
+  createdAt      DateTime     @default(now())
+
+  @@index([warehouseCode, createdAt])
+  @@index([sku])
+}
+
+model Move {
+  id             String      @id
+  requestId      String      @unique
+  warehouseCode  String
+  sku            String
+  fromLocationId String
+  toLocationId   String
+  lot            String      @default("")
+  expiry         String      @default("")
+  status         StockStatus
+  qty            Decimal     @db.Decimal(14, 3)
+  note           String      @default("")
+  actorId        String
+  createdAt      DateTime    @default(now())
+
+  @@index([warehouseCode, createdAt])
+}
+
+model LabelBatch {
+  id          String   @id @default(cuid())
+  requestId   String   @unique
+  actorId     String
+  locationIds String[]
+  createdAt   DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  entity    String
+  entityId  String
+  actorId   String
+  before    Json?
+  after     Json?
+  createdAt DateTime @default(now())
+
+  @@index([entity, createdAt])
+}
+
+// เลขเอกสารต่อเนื่อง เช่น RC-2026 → RC-2026-000001
+model DocSequence {
+  key  String @id
+  last Int
+}

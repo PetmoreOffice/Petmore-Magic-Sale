@@ -1,0 +1,21 @@
+{
+  "name": "petmore-wms",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @petmore/shared",
+    "db:up": "docker compose up -d db",
+    "db:migrate": "npm run prisma:migrate -w @petmore/api",
+    "db:seed": "npm run seed -w @petmore/api",
+    "dev": "npm run build:shared && concurrently -n api,web -c magenta,cyan \"npm run dev -w @petmore/api\" \"npm run dev -w @petmore/web\"",
+    "build": "npm run build:shared && npm run build -w @petmore/api && npm run build -w @petmore/web",
+    "typecheck": "npm run build:shared && npm run typecheck -w @petmore/api && npm run typecheck -w @petmore/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
