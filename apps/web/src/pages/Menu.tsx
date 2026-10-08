@@ -1,45 +1,22 @@
-import { type ComponentType, lazy, Suspense, useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  ArrowLeftRightIcon, ArrowRightIcon, BoxesIcon, ChevronRightIcon, ClipboardCheckIcon, ClipboardListIcon, PackagePlusIcon, QrCodeIcon, Undo2Icon, UsersIcon,
-} from 'lucide-react';
+import { ArrowRightIcon, ChevronRightIcon, ClipboardCheckIcon, Undo2Icon } from 'lucide-react';
 import { cn } from 'cn';
-import type { CheckCounts, Paged, Permission, ProductReturn } from '@petmore/shared';
-import { MagicStage, TONES, type Tone } from '@/components/magic';
+import type { CheckCounts, Paged, ProductReturn } from '@petmore/shared';
+import { MagicStage, TONES } from '@/components/magic';
 import SpotlightCard from '@/components/SpotlightCard';
+import { APP_MENUS } from '@/lib/menus';
 import { usePrefersReducedMotion } from '@/lib/motion';
 import { api } from '../api';
+import { useAuth } from '../auth';
 
 // ตัวนับใช้ motion/react โหลดแยกไฟล์ หน้าแรกจะได้ไม่ต้องรอไลบรารีแอนิเมชัน
 const CountUp = lazy(() => import('@/components/CountUp'));
-import { useAuth } from '../auth';
 
-interface Task {
-  to: string;
-  title: string;
-  hint: string;
-  perms: Permission[];
-  icon: ComponentType<{ className?: string }>;
-  tone: Tone;
-}
-
-/** งานขายหน้างานเป็นลำดับ: จดออเดอร์ → ตรวจของที่เบิก → คืนของที่เหลือ แสดงเป็นเส้นทางเดียวกัน */
-const SALES_FLOW: Task[] = [
-  { to: '/orders', title: 'ออเดอร์สินค้า', hint: 'จดออเดอร์ของผู้สั่ง และดูออเดอร์ย้อนหลัง', perms: ['orders.view', 'orders.create'], icon: ClipboardListIcon, tone: 'star' },
-  { to: '/check', title: 'ตรวจของเบิก', hint: 'สแกนของที่เบิกมา เทียบกับออเดอร์ว่าครบ ขาด หรือเกิน', perms: ['picks.check'], icon: ClipboardCheckIcon, tone: 'mint' },
-  { to: '/returns', title: 'คืนสินค้า', hint: 'คืนของที่เบิกเกิน ขายไม่หมด หรือปิดงานอีเวนต์', perms: ['returns.create'], icon: Undo2Icon, tone: 'kibble' },
-];
-
-const WAREHOUSE: Task[] = [
-  { to: '/receive', title: 'รับสินค้า', hint: 'สแกนสินค้าและ Location เพิ่มสต็อก', perms: ['receive.create'], icon: PackagePlusIcon, tone: 'sky' },
-  { to: '/move', title: 'ย้าย Location', hint: 'สแกนต้นทาง เลือกสินค้า สแกนปลายทาง', perms: ['move.create'], icon: ArrowLeftRightIcon, tone: 'plum' },
-  { to: '/stock', title: 'ดูสต็อก', hint: 'ค้นตาม SKU บาร์โค้ด Location ล็อต', perms: ['stock.view'], icon: BoxesIcon, tone: 'rose' },
-  { to: '/labels', title: 'พิมพ์ป้าย Location', hint: 'ป้าย QR + บาร์โค้ด A4 หน้าละ 3 ป้าย', perms: ['locations.print'], icon: QrCodeIcon, tone: 'mint' },
-];
-
-const SYSTEM: Task[] = [
-  { to: '/users', title: 'จัดการผู้ใช้', hint: 'เพิ่มผู้ใช้ ตั้งตำแหน่ง สิทธิ์ และคลัง', perms: ['users.view', 'users.manage'], icon: UsersIcon, tone: 'star' },
-];
+/** งานขายหน้างานเป็นลำดับ: จดออเดอร์ → ตรวจของที่เบิก → คืนของที่เหลือ แสดงเป็นเส้นทางเดียวกัน (เมนูทั้งหมดอยู่ที่ lib/menus.ts) */
+const SALES_FLOW = APP_MENUS.filter((m) => m.group === 'sales');
+const WAREHOUSE = APP_MENUS.filter((m) => m.group === 'warehouse');
+const SYSTEM = APP_MENUS.filter((m) => m.group === 'system');
 
 /** คำทักตามช่วงเวลา (เวลาไทย) */
 function greeting(now: Date) {

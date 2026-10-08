@@ -1,6 +1,6 @@
 import { lazy, ReactNode, Suspense } from 'react';
-import { Link, Navigate, Route, Routes } from 'react-router-dom';
-import { LogOutIcon } from 'lucide-react';
+import { Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
+import { ArrowLeftIcon, LogOutIcon } from 'lucide-react';
 import type { Permission } from '@petmore/shared';
 import { Button } from '@/components/ui/button';
 import { useAuth } from './auth';
@@ -19,15 +19,32 @@ const UsersPage = lazy(() => import('./pages/Users').then((m) => ({ default: m.U
 // wide = หน้าที่ต้องวางสองคอลัมน์บนจอคอม (ออเดอร์) หน้าอื่นคอลัมน์เดียวแคบอ่านง่าย
 function Shell({ title, wide, children }: { title: string; wide?: boolean; children: ReactNode }) {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const home = useLocation().pathname === '/';
+  // ย้อนกลับหน้าก่อนหน้าในแอป ถ้าเปิดหน้านี้ตรงๆ (ลิงก์/รีเฟรช ไม่มีประวัติในแอป) กลับเมนูหลักแทน ไม่หลุดออกจากแอป
+  const back = () => ((window.history.state?.idx ?? 0) > 0 ? navigate(-1) : navigate('/'));
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 print:hidden bg-brand text-brand-foreground pt-[env(safe-area-inset-top,0px)]">
-        <div className={`mx-auto flex min-h-16 items-center gap-3 px-4 ${wide ? 'max-w-6xl' : 'max-w-3xl'}`}>
+        <div className={`mx-auto flex min-h-16 items-center gap-2 px-4 sm:gap-3 ${wide ? 'max-w-6xl' : 'max-w-3xl'}`}>
+          {/* ปุ่มย้อนกลับทุกหน้า ยกเว้นเมนูหลัก (48px จอแคบเหลือแค่ไอคอน) */}
+          {!home && (
+            <Button
+              variant="ghost"
+              size="touch"
+              aria-label="ย้อนกลับ"
+              className="-ml-2 min-w-12 shrink-0 px-3 text-brand-foreground hover:bg-on-sky/10 hover:text-brand-foreground"
+              onClick={back}
+            >
+              <ArrowLeftIcon />
+              <span className="hidden sm:inline">ย้อนกลับ</span>
+            </Button>
+          )}
           {/* ลิงก์ชื่อแอปพากลับเมนูหลัก ขยายพื้นที่กดให้สูง 48px */}
           <Link
             to="/"
             aria-label="Petmore Magic Sale กลับเมนูหลัก"
-            className="-ml-1 inline-flex min-h-12 shrink-0 items-center rounded-lg px-1 outline-none focus-visible:ring-3 focus-visible:ring-star/60"
+            className={`${home ? '-ml-1' : ''} inline-flex min-h-12 shrink-0 items-center rounded-lg px-1 outline-none focus-visible:ring-3 focus-visible:ring-star/60`}
           >
             <img src="/brand/logo-sm.png" alt="" width={240} height={185} className="h-12 w-auto" />
           </Link>
@@ -37,11 +54,13 @@ function Shell({ title, wide, children }: { title: string; wide?: boolean; child
           <Button
             variant="ghost"
             size="touch"
-            className="-mr-2 px-3 text-brand-foreground hover:bg-on-sky/10 hover:text-brand-foreground"
+            aria-label="ออกจากระบบ"
+            className="-mr-2 min-w-12 shrink-0 px-3 text-brand-foreground hover:bg-on-sky/10 hover:text-brand-foreground"
             onClick={() => void logout()}
           >
             <LogOutIcon />
-            ออกจากระบบ
+            {/* จอแคบเหลือแค่ไอคอน ให้ชื่อหน้ามีที่พอ */}
+            <span className="hidden sm:inline">ออกจากระบบ</span>
           </Button>
         </div>
       </header>

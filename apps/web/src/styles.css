@@ -29,6 +29,9 @@
   --pm-on-star: #2b1d04;
   /* ตัวอักษร เส้น และพื้นโปร่งบนท้องฟ้ายามค่ำ (MagicStage, เวทีสแกน, แถบล่าง) ขาวเท่ากันทั้งสองโหมด ใช้ on-sky/10 ฯลฯ */
   --pm-on-sky: #ffffff;
+  /* มิ้นต์/คาราเมลที่อ่านได้บนท้องฟ้า (กลุ่มดาวตำแหน่งในหน้าจัดการผู้ใช้) เท่ากันทั้งสองโหมด */
+  --pm-on-sky-mint: #6fd3b6;
+  --pm-on-sky-kibble: #e8b07c;
   /* เงาของธีม: สีท้องฟ้ายามค่ำโหมดสว่าง ใช้ทั้งสองโหมด (ผ่าน shadow-lift / shadow-stage / shadow-dock) */
   --pm-shadow: #241a3d;
   --pm-kibble: #a8622a;
@@ -132,6 +135,8 @@
   --color-star-ink: var(--pm-star-ink);
   --color-on-star: var(--pm-on-star);
   --color-on-sky: var(--pm-on-sky);
+  --color-on-sky-mint: var(--pm-on-sky-mint);
+  --color-on-sky-kibble: var(--pm-on-sky-kibble);
   /* lift = การ์ดลอยตอน hover, stage = เวทีท้องฟ้า, dock = แถบล่างติดขอบจอ */
   --shadow-lift: 0 12px 28px -16px color-mix(in oklab, var(--pm-shadow) 50%, transparent);
   --shadow-stage: 0 10px 30px -12px color-mix(in oklab, var(--pm-shadow) 55%, transparent);

@@ -76,6 +76,8 @@
 - เอกสารที่พิมพ์ (ใบออเดอร์/ใบคืน) ใส่ `data-print-doc` ที่ Card สีขาว-ดำอยู่ใน `@media print`
 - ตัวเลือกแบบ `role="radio"` ใน `role="radiogroup"` ได้ลูกศร/Home/End และ roving tabindex อัตโนมัติจาก `lib/radio.ts` (ติดตั้งที่ main.tsx) ห้ามใส่ tabIndex เอง
 - หน้าที่โหลดพร้อมแอป (Login, Menu, Receive, Stock, Move) ห้าม import `motion/react` ตรงๆ ใช้ `usePrefersReducedMotion` จาก `@/lib/motion` และ lazy คอมโพเนนต์ที่ใช้ motion; BlurText/CountUp เช็กลดการเคลื่อนไหวในตัวเองแล้ว
+- เมนูทั้งหมดของแอปอยู่ที่ `lib/menus.ts` (`APP_MENUS`) หน้าแรกและแถบ "เมนูที่เปิดได้" ในหน้าจัดการผู้ใช้อ่านจากที่นี่ เพิ่มเมนูใหม่ต้องใส่ `perms` (เปิดได้เมื่อมีข้อใดข้อหนึ่ง) และ `related` (สิทธิ์ทุกข้อของเมนู)
+- `components/ui/sheet.tsx` เขียนเองตามแบบ shadcn (`shadcn add sheet` จะขอเขียนทับ button.tsx) แผงด้านข้างใช้ตัวนี้
 - ตอนติดตั้งคอมโพเนนต์ที่พ่วง button.tsx มาด้วย ให้ตอบ **ไม่** เขียนทับ (มีขนาด touch ที่เพิ่มเอง)
 
 ## โลโก้และไอคอน
