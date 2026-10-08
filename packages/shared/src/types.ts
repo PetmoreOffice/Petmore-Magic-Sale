@@ -38,6 +38,37 @@ export interface SessionUser {
   warehouseScope: WarehouseScope;
 }
 
+/** ผู้ใช้ในหน้าจัดการผู้ใช้ */
+export interface ManagedUser extends SessionUser {
+  active: boolean;
+  revision: number;
+}
+
+export interface UserInput {
+  requestId: string;
+  create: boolean;
+  /** revision ที่โหลดมา กันสองคนแก้ทับกัน (สร้างใหม่ส่ง 0) */
+  revision: number;
+  username: string;
+  displayName: string;
+  role: RoleCode;
+  active: boolean;
+  /** ว่าง = ไม่เปลี่ยนรหัสผ่าน (สร้างใหม่ต้องมี อย่างน้อย 8 ตัว) */
+  password?: string;
+  warehouseScope: WarehouseScope;
+  permissions: Permission[];
+}
+
+/** ประวัติการแก้ผู้ใช้ 1 ครั้ง before = null คือสร้างใหม่ */
+export interface UserAuditEntry {
+  id: string;
+  username: string;
+  actor: string;
+  createdAt: string;
+  before: SessionUser | null;
+  after: (SessionUser & { active?: boolean; passwordChanged?: boolean }) | null;
+}
+
 export interface LoginResult {
   token: string;
   expiresAt: string;

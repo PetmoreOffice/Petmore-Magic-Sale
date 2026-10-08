@@ -14,6 +14,7 @@ const LabelsPage = lazy(() => import('./pages/Labels').then((m) => ({ default: m
 const OrdersPage = lazy(() => import('./pages/Orders').then((m) => ({ default: m.OrdersPage })));
 const CheckPage = lazy(() => import('./pages/Check').then((m) => ({ default: m.CheckPage })));
 const ReturnsPage = lazy(() => import('./pages/Returns').then((m) => ({ default: m.ReturnsPage })));
+const UsersPage = lazy(() => import('./pages/Users').then((m) => ({ default: m.UsersPage })));
 
 // wide = หน้าที่ต้องวางสองคอลัมน์บนจอคอม (ออเดอร์) หน้าอื่นคอลัมน์เดียวแคบอ่านง่าย
 function Shell({ title, wide, children }: { title: string; wide?: boolean; children: ReactNode }) {
@@ -70,6 +71,7 @@ export function App() {
       <Route path="/stock" element={<Guard title="ดูสต็อก" perms={['stock.view']}><StockPage /></Guard>} />
       <Route path="/move" element={<Guard title="ย้าย Location" perms={['move.create']}><MovePage /></Guard>} />
       <Route path="/labels" element={<Guard title="พิมพ์ป้าย Location" perms={['locations.print']}><Suspense fallback={<p className="text-sm text-muted-foreground">กำลังเปิดหน้าพิมพ์ป้าย…</p>}><LabelsPage /></Suspense></Guard>} />
+      <Route path="/users" element={<Guard title="จัดการผู้ใช้" wide perms={['users.view', 'users.manage']}><Suspense fallback={<p role="status">กำลังเปิดหน้าจัดการผู้ใช้…</p>}><UsersPage /></Suspense></Guard>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

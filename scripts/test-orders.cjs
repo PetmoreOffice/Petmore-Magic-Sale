@@ -17,7 +17,7 @@ const rollback = new Error('ROLLBACK_ORDER_TESTS');
 let checks = 0;
 
 async function run() {
-  const user = { id: 'order-integration-test', username: 'test', displayName: 'test', roleCode: 'WH', permissions: ['orders.create', 'orders.view'], warehouseScope: { all: false, codes: [] } };
+  const user = { id: 'order-integration-test', username: 'test', displayName: 'test', roleCode: 'PICKER', permissions: ['orders.create', 'orders.view'], warehouseScope: { all: false, codes: [] } };
   try {
     await prisma.$transaction(async (tx) => {
       const serviceDb = new Proxy(tx, { get(target, key) {

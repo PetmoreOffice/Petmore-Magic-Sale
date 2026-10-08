@@ -35,18 +35,38 @@ export const PERMISSION_GROUPS: { name: string; items: Permission[] }[] = [
 ];
 
 // ตำแหน่งเป็นแค่ค่าเริ่มต้นของสิทธิ์ แก้รายคนได้
+// ADMIN  ผู้ดูแลระบบ  ทำได้ทุกอย่าง
+// CHECKER แอดมิน      ตรวจของที่ Sup เบิกมาว่าถูกไหม บันทึกคืนสินค้า และทำงานคลัง
+// PICKER  ผู้เบิกสินค้า (Sup) สร้างออเดอร์แล้วเบิกของ เห็นเฉพาะออเดอร์ของตัวเอง
 export const ROLES = {
   ADMIN: 'ผู้ดูแลระบบ',
-  MANAGER: 'ผู้จัดการคลัง',
-  WH: 'พนักงานคลัง',
+  CHECKER: 'แอดมิน',
+  PICKER: 'ผู้เบิกสินค้า',
 } as const;
 
 export type RoleCode = keyof typeof ROLES;
 
+/** คำอธิบายสั้นใต้ชื่อตำแหน่งในหน้าจัดการผู้ใช้ */
+export const ROLE_DESCRIPTIONS: Record<RoleCode, string> = {
+  ADMIN: 'ทำได้ทุกอย่าง รวมถึงจัดการผู้ใช้ ทะเบียนสินค้า และคลัง',
+  CHECKER: 'ตรวจของที่เบิกมา บันทึกคืนสินค้า และทำงานคลัง',
+  PICKER: 'Sup สร้างออเดอร์แล้วเบิกของ เห็นเฉพาะออเดอร์ของตัวเอง',
+};
+
+export function isRoleCode(value: string): value is RoleCode {
+  return value in ROLES;
+}
+
 export const ROLE_DEFAULTS: Record<RoleCode, Permission[]> = {
   ADMIN: ALL_PERMISSIONS,
-  MANAGER: ALL_PERMISSIONS.filter((p) => p !== 'users.manage'),
-  WH: ['receive.view', 'receive.create', 'stock.view', 'move.view', 'move.create', 'locations.view'],
+  CHECKER: [
+    'orders.view', 'picks.check', 'returns.create',
+    'receive.view', 'receive.create', 'receive.print',
+    'stock.view', 'stock.print',
+    'move.view', 'move.create',
+    'locations.view', 'locations.print',
+  ],
+  PICKER: ['orders.view', 'orders.create'],
 };
 
 export function isPermission(value: string): value is Permission {

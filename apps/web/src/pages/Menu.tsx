@@ -1,7 +1,7 @@
 import { type ComponentType, lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  ArrowLeftRightIcon, ArrowRightIcon, BoxesIcon, ChevronRightIcon, ClipboardCheckIcon, ClipboardListIcon, PackagePlusIcon, QrCodeIcon, Undo2Icon,
+  ArrowLeftRightIcon, ArrowRightIcon, BoxesIcon, ChevronRightIcon, ClipboardCheckIcon, ClipboardListIcon, PackagePlusIcon, QrCodeIcon, Undo2Icon, UsersIcon,
 } from 'lucide-react';
 import { cn } from 'cn';
 import type { CheckCounts, Paged, Permission, ProductReturn } from '@petmore/shared';
@@ -37,6 +37,10 @@ const WAREHOUSE: Task[] = [
   { to: '/labels', title: 'พิมพ์ป้าย Location', hint: 'ป้าย QR + บาร์โค้ด A4 หน้าละ 3 ป้าย', perms: ['locations.print'], icon: QrCodeIcon, tone: 'mint' },
 ];
 
+const SYSTEM: Task[] = [
+  { to: '/users', title: 'จัดการผู้ใช้', hint: 'เพิ่มผู้ใช้ ตั้งตำแหน่ง สิทธิ์ และคลัง', perms: ['users.view', 'users.manage'], icon: UsersIcon, tone: 'star' },
+];
+
 /** คำทักตามช่วงเวลา (เวลาไทย) */
 function greeting(now: Date) {
   const h = Number(now.toLocaleString('en-GB', { hour: '2-digit', hour12: false, timeZone: 'Asia/Bangkok' }));
@@ -52,6 +56,7 @@ export function MenuPage() {
   const reduce = usePrefersReducedMotion();
   const flow = SALES_FLOW.filter((t) => has(...t.perms));
   const warehouse = WAREHOUSE.filter((t) => has(...t.perms));
+  const system = SYSTEM.filter((t) => has(...t.perms));
   const scope = user?.warehouseScope;
   const now = new Date();
   const [counts, setCounts] = useState<CheckCounts | null>(null);
@@ -155,7 +160,29 @@ export function MenuPage() {
         </section>
       )}
 
-      {!flow.length && !warehouse.length && <p className="rounded-xl bg-secondary p-4 text-sm">บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งานเมนูใด ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์</p>}
+      {system.length > 0 && (
+        <section className="grid gap-3" aria-labelledby="menu-system">
+          <h2 id="menu-system" className="font-heading text-xl font-semibold">ตั้งค่าระบบ</h2>
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            {system.map((t) => (
+              <li key={t.to}>
+                <Link
+                  to={t.to}
+                  className="group flex h-full min-h-20 items-center gap-3 rounded-xl border border-border bg-card p-3 outline-none transition-[border-color,background-color] hover:border-star/50 hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50"
+                >
+                  <span className={cn('grid size-11 shrink-0 place-items-center rounded-xl', TONES[t.tone])}><t.icon className="size-5" aria-hidden /></span>
+                  <span className="grid min-w-0 flex-1">
+                    <span className="font-semibold">{t.title}</span>
+                    <span className="line-clamp-2 text-xs text-muted-foreground">{t.hint}</span>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {!flow.length && !warehouse.length && !system.length &&<p className="rounded-xl bg-secondary p-4 text-sm">บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งานเมนูใด ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์</p>}
     </div>
   );
 }
