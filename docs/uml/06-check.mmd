@@ -1,0 +1,33 @@
+sequenceDiagram
+  actor C as แอดมิน
+  participant W as เว็บ (ตรวจของเบิก)
+  participant A as API
+  participant D as PostgreSQL
+  C->>W: สแกนบาร์โค้ดบนใบออเดอร์
+  W->>A: GET /orders/{SO}
+  A-->>W: รายการที่สั่ง
+  loop ทุกชิ้นที่เบิกมา
+    C->>W: สแกนสินค้า
+    W->>A: GET /products/lookup/{บาร์โค้ด}
+    A-->>W: สินค้า + ขนาด
+    alt ขนาดตรงกับที่สั่ง
+      W->>W: นับ +1 ในหน่วยที่สั่ง
+    else ขนาดอื่นของ SKU เดียวกัน
+      W->>W: นับเข้ารายการเป็นชิ้น (เช่น 36/48 ชิ้น)
+    else ไม่อยู่ในออเดอร์
+      W->>W: แยกเป็นรายการสีแดง
+    end
+  end
+  opt สแกนไม่ได้
+    C->>W: กด "นับเอง" + เลือกเหตุผล แล้วพิมพ์จำนวน
+  end
+  C->>W: บันทึกผลตรวจ
+  alt ขาดอย่างเดียว
+    W-->>C: ถาม: ของไม่พอ ยืนยันให้ตามที่มี / บันทึกเป็นไม่ครบ
+  end
+  W->>A: POST /orders/{SO}/checks (ยอด, parts, manualReason, shortStock)
+  A->>D: แปลงขนาดเป็นชิ้นจาก ProductPack (countWithParts)
+  A->>A: สรุปสถานะ MATCH / PARTIAL / MISMATCH
+  A->>D: บันทึก PickCheck CK-ปี-เลข + อัปเดต checkStatus ของออเดอร์
+  A-->>W: ผลตรวจ
+  W-->>C: หน้าผลตรวจ (ครบ / ของไม่พอ / รายการที่ไม่ตรง / นับเอง)

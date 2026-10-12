@@ -1,0 +1,14 @@
+stateDiagram-v2
+  state "รอตรวจ (ว่าง)" as PENDING
+  state "ครบ (MATCH)" as MATCH
+  state "ของไม่พอ ให้ตามที่มี (PARTIAL)" as PARTIAL
+  state "ไม่ตรงออเดอร์ (MISMATCH)" as MISMATCH
+  [*] --> PENDING : จดออเดอร์
+  PENDING --> MATCH : นับตรงทุกรายการ
+  PENDING --> PARTIAL : ขาดอย่างเดียว และยืนยันของไม่พอ
+  PENDING --> MISMATCH : ขาด เกิน หรือของนอกออเดอร์
+  MISMATCH --> MATCH : ตรวจซ้ำแล้วครบ
+  MISMATCH --> PARTIAL : ตรวจซ้ำ ของไม่พอ
+  PARTIAL --> MATCH : ของเข้ามาเพิ่ม ตรวจซ้ำ
+  MATCH --> [*]
+  PARTIAL --> [*]

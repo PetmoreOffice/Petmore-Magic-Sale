@@ -64,6 +64,10 @@ npm run dev
 
 เปิด http://localhost:5173 แล้วเข้าสู่ระบบด้วยบัญชีผู้ดูแลที่ตั้งไว้
 
+## ใช้งานจริงบนเซิร์ฟเวอร์
+
+ขั้นตอนทั้งหมดอยู่ที่ [docs/DEPLOY.md](docs/DEPLOY.md) (Docker Compose: PostgreSQL + API + Caddy, คนนอกบริษัทเข้าผ่าน Cloudflare Tunnel)
+
 ## ทดสอบกล้องบนมือถือ
 
 มือถือกับคอมต้องอยู่ Wi-Fi เดียวกัน

@@ -1,0 +1,20 @@
+flowchart LR
+  subgraph Devices["อุปกรณ์ผู้ใช้"]
+    P["มือถือ Sup<br/>(งานอีเวนต์)"]
+    PC["คอมแอดมิน<br/>(ออฟฟิศ)"]
+  end
+  CF["Cloudflare Tunnel<br/>HTTPS (แผน)"]
+  subgraph Server["เซิร์ฟเวอร์บริษัท Windows + Docker (แผน)"]
+    CA["Caddy<br/>ส่งไฟล์เว็บ + ต่อ API"]
+    WEB["เว็บ React + Vite PWA"]
+    API["API NestJS<br/>สิทธิ์ / จำกัดคำขอ / กันเดารหัส"]
+    PG[("PostgreSQL<br/>ออเดอร์ ผลตรวจ ใบคืน ผู้ใช้")]
+  end
+  ERP[("SQL Server บริษัท<br/>192.168.10.250 อ่านอย่างเดียว")]
+  P -. "อินเทอร์เน็ต" .-> CF
+  CF -.-> CA
+  PC -- "LAN" --> CA
+  CA --> WEB
+  CA --> API
+  API --> PG
+  API -- "sync สินค้า / ผู้สั่ง (TLS 1.0)" --> ERP

@@ -53,6 +53,13 @@
 - จำกัดคำขอต่อ IP `common/rate-limit.ts`: ทั้ง API 600/นาที, เข้าสู่ระบบ 30/10 นาที ตอบ 429 ภาษาไทย IP จริงอ่านจาก `CF-Connecting-IP`/`X-Forwarded-For` เฉพาะเมื่อคำขอมาจากวงภายใน (Caddy/cloudflared) ตอน deploy ห้ามเปิดพอร์ต API ตรงสู่อินเทอร์เน็ต
 - อย่าทดสอบด้วยการยิงล็อกอินจริงจากเครื่องพัฒนาเกิน 30 ครั้ง เครื่องนั้นจะเข้าสู่ระบบไม่ได้ 10 นาที (ทดสอบ `WindowCounter` แยกแทน)
 
+## Deploy (`deploy/`, คู่มือ `docs/DEPLOY.md`)
+
+- เซิร์ฟเวอร์ Windows + Docker Desktop: `deploy/docker-compose.yml` (project `petmore`: db, api, web=Caddy, tunnel=cloudflared แบบ profile) ค่าอยู่ที่ `deploy/.env` แยกจาก `apps/api/.env` ของเครื่องพัฒนา
+- api รัน `prisma migrate deploy` เองทุกครั้งที่เปิด, TZ=Asia/Bangkok (เลขเอกสารใช้ปีตามเวลาเครื่อง)
+- Caddy `:80` = LAN (ลบหัว CF-Connecting-IP), `:8080` = ทางเข้า Cloudflare Tunnel เท่านั้น (Public Hostname ต้องชี้ `web:8080`) ไม่เปิดพอร์ต api/db ออกนอกเครื่อง
+- แก้ Dockerfile/compose แล้วทดสอบด้วย project name อื่น (`docker compose -p petmore-test`) และ `HTTP_PORT` อื่น อย่าชนกับ db ของเครื่องพัฒนา (`petmoremagicsaleoms-db-1`)
+
 ## ตรวจของเบิก (`/check`, สิทธิ์ `picks.check`)
 
 - ใช้ตอนคนเบิกเอาของมาส่ง: สแกนบาร์โค้ดเลขออเดอร์บนใบออเดอร์ แล้วสแกนของทีละชิ้น ระบบเทียบกับออเดอร์ทันที

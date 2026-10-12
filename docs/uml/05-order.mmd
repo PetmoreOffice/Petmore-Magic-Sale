@@ -1,0 +1,20 @@
+sequenceDiagram
+  actor S as Sup (มือถือ)
+  participant W as เว็บ (หน้าออเดอร์)
+  participant A as API
+  participant D as PostgreSQL
+  S->>W: ค้นหรือสแกนสินค้า (ช่องค้น / ปุ่มกล้อง)
+  W->>A: GET /products/lookup/{บาร์โค้ด}
+  A->>D: หา ProductPack / Product
+  A-->>W: สินค้า + บาร์โค้ดทุกขนาด
+  S->>W: เลือกขนาด + จำนวน ใส่ตะกร้า
+  S->>W: เลือกผู้สั่ง แล้วกดบันทึกออเดอร์
+  W->>A: POST /orders (requestId, ผู้สั่ง, รายการ)
+  A->>A: ตรวจสิทธิ์ orders.create
+  alt requestId นี้เคยบันทึกแล้ว
+    A-->>W: ออเดอร์เดิม
+  else ใหม่
+    A->>D: ขอเลข SO-ปี-เลข (DocSequence) + บันทึกออเดอร์ + AuditLog
+    A-->>W: SalesOrder
+  end
+  W-->>S: ใบออเดอร์พร้อมบาร์โค้ด (สถานะ: รอตรวจ)

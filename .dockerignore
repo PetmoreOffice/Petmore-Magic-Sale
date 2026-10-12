@@ -1,0 +1,17 @@
+# ไม่ส่งเข้า docker build (deploy/Dockerfile): ไฟล์ลับ ของที่ build ใหม่ในนั้นเอง และเอกสาร
+**/node_modules
+**/dist
+**/dev-dist
+**/.env
+**/.env.*
+!**/.env.example
+**/*.log
+.git
+.claude
+.impeccable
+**/.impeccable
+audit
+docs
+scripts
+*.html
+*.md

@@ -1,0 +1,27 @@
+sequenceDiagram
+  actor U as ผู้ใช้
+  participant W as เว็บ (หน้าบัตรเข้างาน)
+  participant R as ตัวจำกัดคำขอ
+  participant A as AuthService
+  participant D as PostgreSQL
+  U->>W: กรอกชื่อผู้ใช้ + รหัสผ่าน แล้วกดปุ่มบนต้นขั้ว
+  W->>R: POST /api/auth/login
+  alt เกิน 30 ครั้งใน 10 นาที จากเครือข่ายเดียวกัน
+    R-->>W: 429 ลองบ่อยเกินไป
+  else ผ่าน
+    R->>A: login(username, password)
+    alt ชื่อนี้ผิดครบ 5 ครั้ง ยังอยู่ในช่วงพัก 15 นาที
+      A-->>W: 429 บัญชีถูกพักชั่วคราว
+    else ลองได้
+      A->>D: หาผู้ใช้ และตรวจรหัส (scrypt)
+      alt รหัสถูก
+        A->>D: สร้าง Session อายุ 12 ชั่วโมง
+        A-->>W: token + ตำแหน่ง + สิทธิ์
+        W->>W: ประทับตรา "ตรวจแล้ว" แล้วฉีกต้นขั้ว
+        W-->>U: เข้าเมนูหลัก
+      else รหัสผิด
+        A-->>W: 401 (เตือนเมื่อเหลือ 2 ครั้ง)
+        W-->>U: บัตรสั่น เคอร์เซอร์กลับช่องรหัสผ่าน
+      end
+    end
+  end

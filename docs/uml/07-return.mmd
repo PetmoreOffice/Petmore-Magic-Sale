@@ -1,0 +1,22 @@
+sequenceDiagram
+  actor C as แอดมิน
+  participant W as เว็บ (คืนสินค้า)
+  participant A as API
+  participant D as PostgreSQL
+  C->>W: สแกนใบออเดอร์
+  W->>A: GET /returns/order/{SO}
+  A->>D: ผลตรวจล่าสุด + ยอดที่คืนไปแล้ว
+  A-->>W: เบิกไป / คืนแล้ว / หน่วย (ชิ้น หรือหน่วยที่สั่ง)
+  loop ของที่คืน
+    C->>W: สแกนสินค้า (เลือกโหมดของดี FG หรือเสียหาย DM)
+    W->>W: นับเพิ่ม (โหลคืน = +12 ชิ้น) ห้ามเกินยอดที่เหลือ
+  end
+  C->>W: เลือกสาเหตุ แล้วกดบันทึกใบคืน
+  W->>A: POST /returns
+  A->>D: คำนวณยอดเบิก - คืนแล้ว ในธุรกรรมเดียวกัน
+  alt คืนเกินยอดเบิก
+    A-->>W: 400 คืนเกินที่เบิกไป
+  else ผ่าน
+    A->>D: บันทึก ProductReturn RT-ปี-เลข + ReturnLine
+    A-->>W: ใบคืน
+  end

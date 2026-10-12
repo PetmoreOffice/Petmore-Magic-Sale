@@ -1,0 +1,63 @@
+# ระบบจริงบนเครื่องเซิร์ฟเวอร์ (คู่มือ: docs/DEPLOY.md)
+#   cd deploy แล้ว docker compose up -d --build (อ่านค่าจาก deploy/.env)
+# ไฟล์ docker-compose.yml ที่ root ใช้ตอนพัฒนาเท่านั้น
+
+name: petmore
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wms
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?ตั้ง POSTGRES_PASSWORD ใน deploy/.env}
+      POSTGRES_DB: petmore_wms
+      TZ: Asia/Bangkok
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # ไม่เปิดพอร์ตฐานข้อมูลออกนอกเครื่อง
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wms -d petmore_wms"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://wms:${POSTGRES_PASSWORD}@db:5432/petmore_wms
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    # ไม่เปิดพอร์ต API ตรง ทุกคำขอต้องผ่าน Caddy (web)
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: web
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+    depends_on:
+      - api
+
+  # เปิดเมื่อมีโดเมนแล้ว: docker compose ... --profile tunnel up -d
+  tunnel:
+    image: cloudflare/cloudflared:2025.9.1
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      - web
+    profiles: ["tunnel"]
+
+volumes:
+  pgdata:

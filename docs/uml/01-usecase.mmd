@@ -1,0 +1,49 @@
+flowchart LR
+  SUP(["ผู้เบิกสินค้า (Sup)<br/>PICKER"])
+  CHK(["แอดมิน<br/>CHECKER"])
+  ADM(["ผู้ดูแลระบบ<br/>ADMIN<br/>ทำได้ทุกอย่างของ Sup และแอดมิน"])
+  subgraph SYS["ระบบ Petmore Magic Sale (งานอีเวนต์)"]
+    direction LR
+    subgraph G1["งานของ Sup"]
+      direction TB
+      UC0(["เข้าสู่ระบบ"])
+      UC1(["จดออเดอร์"])
+      UC2(["ดูออเดอร์ของตัวเอง"])
+    end
+    subgraph G2["งานของแอดมิน"]
+      direction TB
+      UC4(["ตรวจของเบิก"])
+      UC8(["คืนสินค้าจากออเดอร์"])
+      UC9(["ใบคืนอิสระ (ปิดงาน)"])
+      UC10(["ดูออเดอร์ทุกคน"])
+    end
+    subgraph G3["ส่วนขยายของการตรวจ (extend)"]
+      direction TB
+      UC5(["ให้ขนาดอื่นแทน (นับเป็นชิ้น)"])
+      UC6(["ยืนยันของไม่พอ"])
+      UC7(["นับเองพร้อมเหตุผล"])
+    end
+    UC3(["สแกนบาร์โค้ด / กล้อง"])
+    subgraph G4["งานของผู้ดูแลระบบ"]
+      direction TB
+      UC11(["จัดการผู้ใช้และสิทธิ์"])
+      UC12(["ดูประวัติแก้ผู้ใช้"])
+    end
+  end
+  ERP[("SQL Server บริษัท<br/>อ่านอย่างเดียว")]
+  SUP --- UC0
+  SUP --- UC1
+  SUP --- UC2
+  CHK --- UC4
+  CHK --- UC8
+  CHK --- UC9
+  CHK --- UC10
+  ADM --- UC11
+  ADM --- UC12
+  UC1 -. include .-> UC3
+  UC4 -. include .-> UC3
+  UC8 -. include .-> UC3
+  UC5 -. extend .-> UC4
+  UC6 -. extend .-> UC4
+  UC7 -. extend .-> UC4
+  UC1 -- "ดึงสินค้า / ผู้สั่ง (sync)" --> ERP

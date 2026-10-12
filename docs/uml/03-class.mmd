@@ -1,0 +1,98 @@
+classDiagram
+  direction LR
+  class User {
+    +String id
+    +String username
+    +String displayName
+    +String roleCode
+    +List~String~ permissions
+    +Boolean active
+    +Boolean allWarehouses
+    +Int revision
+  }
+  class Session {
+    +String token
+    +DateTime expiresAt
+  }
+  class Customer {
+    +String code
+    +String name
+    +Boolean active
+  }
+  class Product {
+    +String sku
+    +String name
+    +String unit
+    +Decimal unitQty
+    +String customerCode
+  }
+  class ProductPack {
+    +String code
+    +String unitName
+    +Decimal unitQty
+    +Decimal factor
+  }
+  class SalesOrder {
+    +String id
+    +String requestId
+    +String customerCode
+    +String customerName
+    +Date date
+    +String checkStatus
+    +String createdById
+  }
+  class OrderLine {
+    +Int lineNo
+    +String sku
+    +String packCode
+    +String unit
+    +Decimal qty
+  }
+  class PickCheck {
+    +String id
+    +String status
+    +String pickerName
+    +String checkedById
+  }
+  class PickCheckLine {
+    +Int orderLineNo
+    +Decimal expectedQty
+    +Decimal actualQty
+    +Json parts
+    +Decimal unitPieces
+    +Decimal actualPieces
+    +String manualReason
+  }
+  class ProductReturn {
+    +String id
+    +String reason
+    +String returnerName
+  }
+  class ReturnLine {
+    +Int orderLineNo
+    +Decimal goodQty
+    +Decimal damagedQty
+    +Boolean inPieces
+  }
+  class AuditLog {
+    +String entity
+    +String entityId
+    +String actorId
+    +Json before
+    +Json after
+  }
+  class DocSequence {
+    +String key
+    +Int last
+  }
+  User "1" --> "*" Session
+  User "1" --> "*" SalesOrder : จดโดย
+  Customer "1" --> "*" SalesOrder : ผู้สั่ง
+  SalesOrder "1" *-- "1..50" OrderLine
+  SalesOrder "1" *-- "*" PickCheck : ตรวจซ้ำได้
+  PickCheck "1" *-- "*" PickCheckLine
+  PickCheckLine "*" --> "0..1" OrderLine : orderLineNo
+  SalesOrder "1" o-- "*" ProductReturn
+  ProductReturn "1" *-- "*" ReturnLine
+  Product "1" *-- "*" ProductPack
+  OrderLine "*" --> "1" Product : sku
