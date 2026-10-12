@@ -78,7 +78,7 @@ export function CustomerPicker({ value, onChange, disabled }: { value: Customer 
       <p id={`${id}-hint`} className="text-sm text-muted-foreground empty:hidden" aria-live="polite">
         {!all ? <span className="inline-flex items-center gap-1"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden />กำลังโหลดรายชื่อผู้สั่ง…</span>
           : !term.trim() ? null
-          : matches.length ? `พบ ${matches.length} ราย${matches.length > SHOW ? ` แสดง ${SHOW} รายแรก พิมพ์เพิ่มเพื่อให้แคบลง` : ''}`
+          : matches.length ? `พบ ${matches.length} ราย${matches.length > SHOW ? ` แสดง ${SHOW} รายแรก พิมพ์เพิ่มเพื่อจำกัดผลการค้นหา` : ''}`
           : 'ไม่พบผู้สั่งที่ตรงกับคำค้น ลองพิมพ์รหัสหรือชื่อสั้นลง'}
       </p>
       {matches.length > 0 && (

@@ -8,14 +8,13 @@ import {
   ManagedUser, Permission, PERMISSIONS, ROLE_DEFAULTS, ROLE_DESCRIPTIONS, RoleCode, ROLES,
   searchKey, UserAuditEntry, UserInput, Warehouse,
 } from '@petmore/shared';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MagicStage, monogram, ToneChip, TONES, type Tone } from '@/components/magic';
+import { MagicStage, monogram, Seal, ToneChip, TONES, type Tone } from '@/components/magic';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
 import StarBorder from '@/components/StarBorder';
 import { Field, Message, Notice } from '@/components/wms';
@@ -325,7 +324,7 @@ export function UsersPage() {
                               {u.displayName}
                             </button>
                           ) : <span className="truncate font-semibold">{u.displayName}</span>}
-                          {!u.active && <Badge variant="destructive" className="relative justify-self-start">ปิดใช้งาน</Badge>}
+                          {!u.active && <Seal tone="rose" state="broken" className="relative justify-self-start">ปิดใช้งาน</Seal>}
                           <span className="truncate text-xs text-muted-foreground">{u.username}{u.username === me?.username && ' · คุณ'}</span>
                         </div>
                       </div>
@@ -348,7 +347,7 @@ export function UsersPage() {
                       <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="font-semibold">{u.displayName}</span>
                         <ToneChip tone={ROLE_TONE[u.roleCode] ?? 'plum'}>{ROLES[u.roleCode] ?? u.roleCode}</ToneChip>
-                        {!u.active && <Badge variant="destructive">ปิดใช้งาน</Badge>}
+                        {!u.active && <Seal tone="rose" state="broken">ปิดใช้งาน</Seal>}
                       </span>
                       <span className="truncate text-xs text-muted-foreground">{u.username}{u.username === me?.username && ' · คุณ'} · {scopeText(u)}</span>
                       <MenuStrip permissions={u.permissions} className={cn(!u.active && 'opacity-50')} />

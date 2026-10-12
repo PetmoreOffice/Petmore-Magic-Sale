@@ -97,7 +97,7 @@ export function LoginPage() {
             <Button type="submit" size="touch" className="w-full" disabled={busy}>
               {busy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
             </Button>
-            <p className="text-center text-xs text-muted-foreground">เข้าสู่ระบบครั้งเดียว ใช้งานได้ 12 ชั่วโมง</p>
+            <p className="text-center text-xs text-muted-foreground">เซสชันมีอายุสูงสุด 12 ชั่วโมง</p>
           </form>
         </CardContent>
       </Card>

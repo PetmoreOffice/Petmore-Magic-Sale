@@ -37,7 +37,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
+import { Seal } from '@/components/magic';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -496,9 +496,9 @@ export function ReceivePage() {
             <span className="truncate text-sm text-muted-foreground">{docSummary}</span>
           </span>
           {missingDoc.length > 0 && (
-            <Badge variant={showDocErrors ? 'destructive' : 'outline'} className="shrink-0">
+            <Seal tone={showDocErrors ? 'rose' : 'muted'} state={showDocErrors ? 'broken' : 'outline'}>
               ยังไม่กรอก {missingDoc.length} ช่อง
-            </Badge>
+            </Seal>
           )}
           <ChevronDownIcon
             className={cn('size-5 shrink-0 text-muted-foreground transition-transform', docOpen && 'rotate-180')}

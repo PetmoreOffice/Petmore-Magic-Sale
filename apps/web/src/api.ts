@@ -44,7 +44,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
     });
   } catch {
-    throw new ApiError('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจสอบสัญญาณ Wi-Fi แล้วลองอีกครั้ง', 0);
+    throw new ApiError('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง', 0);
   }
   if (res.status === 204) return undefined as T;
   const data = await res.json().catch(() => null);
@@ -54,7 +54,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
       setToken('');
       onUnauthorized();
     }
-    throw new ApiError(msg || `เกิดข้อผิดพลาด (${res.status})`, res.status);
+    throw new ApiError(res.status >= 500 ? 'ระบบขัดข้องชั่วคราว ลองอีกครั้ง หากยังไม่สำเร็จให้ติดต่อผู้ดูแลระบบ' : msg || `ทำรายการไม่สำเร็จ (${res.status}) ลองอีกครั้ง หรือติดต่อผู้ดูแลระบบ`, res.status);
   }
   return data as T;
 }

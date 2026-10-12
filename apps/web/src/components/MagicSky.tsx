@@ -1,5 +1,6 @@
 import { lazy, Suspense, useMemo } from 'react';
 import { cn } from 'cn';
+import { usePrefersReducedMotion } from '@/lib/motion';
 
 // Galaxy มาจาก React Bits (WebGL + ogl) โหลดแยกไฟล์ หน้าเว็บส่วนอื่นไม่ต้องรอ
 const Galaxy = lazy(() => import('./Galaxy'));
@@ -32,7 +33,8 @@ function pickQuality(): SkyQuality {
  * เครื่องที่ตั้งลดการเคลื่อนไหว ไม่มี WebGL หรือ RAM น้อย จะเห็นดาวนิ่งจาก CSS ของพื้นหลังแทน
  */
 export function MagicSky({ className }: { className?: string }) {
-  const quality = useMemo(pickQuality, []);
+  const reduce = usePrefersReducedMotion();
+  const quality = useMemo(pickQuality, [reduce]);
   return (
     <div aria-hidden="true" className={cn('pointer-events-none absolute inset-0 overflow-hidden', className)}>
       {quality.animate && (

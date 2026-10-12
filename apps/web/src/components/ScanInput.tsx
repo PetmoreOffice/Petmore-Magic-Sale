@@ -4,6 +4,7 @@ import { cn } from 'cn';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { STAGE_BACKGROUND, StageDecor } from '@/components/magic';
 
 // ไลบรารีอ่านบาร์โค้ดใหญ่ ~500 KB โหลดเฉพาะตอนกดปุ่มกล้อง Handheld ไม่ต้องโหลด
 const CameraScanner = lazy(() => import('./CameraScanner').then((m) => ({ default: m.CameraScanner })));
@@ -95,16 +96,18 @@ export const ScanInput = forwardRef<ScanInputHandle, Props>(function ScanInput(
     <>
     <div
       className={cn(
-        'relative isolate overflow-hidden rounded-2xl bg-brand p-4 text-brand-foreground ring-1 ring-on-sky/10 transition-opacity',
+        'relative isolate overflow-hidden rounded-2xl bg-brand p-4 text-brand-foreground shadow-stage transition-opacity sm:px-5',
         shake,
         disabled && 'opacity-60',
       )}
+      style={{ backgroundImage: STAGE_BACKGROUND }}
       // แตะตรงไหนของเวทีก็ได้ เพื่อเอาเคอร์เซอร์กลับมาที่ช่องสแกน
       onClick={(e) => {
         if (!disabled && e.target === e.currentTarget) focusInput();
       }}
     >
-      <div className="scan-stage-stars" aria-hidden="true" />
+      {/* ฉากเดียวกับเวทีหัวหน้า (MagicStage): กรอบสมุดคาถา ประกายสี่มุม ดาวนิ่ง รอยเท้าจาง ไม่มีหมวกดาวเพราะมุมขวามีป้ายสถานะ */}
+      <StageDecor hat={false} paw="sm" />
       {flash && (
         <span
           key={flash.key}
@@ -155,7 +158,7 @@ export const ScanInput = forwardRef<ScanInputHandle, Props>(function ScanInput(
         <div className="flex gap-2">
           <div className="relative min-w-0 flex-1">
             <Input
-              className="h-14 border-on-sky/20 bg-on-sky/10 px-4 text-xl tracking-wide text-on-sky placeholder:text-on-sky/55 focus-visible:border-star focus-visible:ring-star/40 disabled:bg-on-sky/5 md:text-xl dark:bg-on-sky/10"
+              className="h-14 border-on-sky/30 bg-on-sky/10 px-3 text-base text-on-sky placeholder:text-on-sky/75 focus-visible:border-star focus-visible:ring-star/40 disabled:bg-on-sky/5 md:text-lg dark:bg-on-sky/10"
               id={id}
               ref={inputRef}
               value={value}

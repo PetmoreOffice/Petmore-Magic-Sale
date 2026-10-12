@@ -3,6 +3,15 @@ import QRCode from 'qrcode';
 import JsBarcode from 'jsbarcode';
 import type { Location } from '@petmore/shared';
 
+/** ประกายสี่แฉกสีดำสำหรับป้ายพิมพ์ (รูปเดียวกับ Sparkle ในแอป แต่ดำตายตัว ไม่ตามธีม) */
+function InkSparkle({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className={className}>
+      <path d="M12 1.5C12.9 8 16 11.1 22.5 12C16 12.9 12.9 16 12 22.5C11.1 16 8 12.9 1.5 12C8 11.1 11.1 8 12 1.5Z" fill="#000" />
+    </svg>
+  );
+}
+
 export interface LabelBatchInfo {
   id: string;
   actor: string;
@@ -53,17 +62,30 @@ export function LocationLabel({ location, zoneName, batch }: { location: Locatio
       className="relative grid aspect-[190/88] w-full grid-rows-[minmax(0,1fr)_auto_auto] gap-[1.4cqw] overflow-hidden rounded-[1.2cqw] border-[0.35cqw] border-black bg-white p-[2.6cqw] text-black [container-type:inline-size] break-inside-avoid"
       aria-label={`ป้าย Location ${code}`}
     >
+      {/* ประกายมุมซ้ายบนบนเส้นกรอบ อยู่ไกลจาก QR และบาร์โค้ด ไม่กินขอบว่างสำหรับสแกน */}
+      <span aria-hidden className="absolute top-[0.4cqw] left-[0.4cqw] grid size-[3.4cqw] place-items-center rounded-full bg-white">
+        <InkSparkle className="size-[2.6cqw]" />
+      </span>
       <div className="grid min-h-0 grid-cols-[minmax(0,1fr)_22cqw] items-center gap-[2.5cqw]">
         <div className="flex min-w-0 flex-col justify-between">
           <div className="flex items-center justify-between gap-[2cqw] text-[2.1cqw] font-semibold tracking-[0.12em] uppercase">
-            <span>Petmore Magic Sale</span>
+            <span className="flex items-center gap-[1cqw]"><InkSparkle className="size-[2.4cqw]" />Petmore Magic Sale<InkSparkle className="size-[1.6cqw]" /></span>
             <span className="rounded-[0.8cqw] bg-black px-[1.2cqw] py-[0.3cqw] tracking-normal text-white">คลัง {location.warehouse}</span>
           </div>
           <strong className="block font-heading leading-none font-semibold tracking-tight whitespace-nowrap" style={{ fontSize: codeSize }}>
             {code}
           </strong>
-          <div className="truncate text-[2.6cqw]">
-            {[zoneName, location.name].filter(Boolean).join(' · ') || ' '}
+          <div className="grid gap-[0.8cqw]">
+            {/* เส้นคั่นแบบสมุดคาถา: เส้นบาง ประกายกลาง จบห่าง QR พอให้มีขอบว่างสำหรับสแกน */}
+            <div aria-hidden className="flex items-center gap-[1cqw] pr-[3cqw]">
+              <span className="h-[0.25cqw] flex-1 bg-black" />
+              <InkSparkle className="size-[2cqw]" />
+              <span className="h-[0.12cqw] w-[6cqw] bg-black" />
+              <InkSparkle className="size-[1.2cqw]" />
+            </div>
+            <div className="truncate text-[2.6cqw]">
+              {[zoneName, location.name].filter(Boolean).join(' · ') || ' '}
+            </div>
           </div>
         </div>
         <div

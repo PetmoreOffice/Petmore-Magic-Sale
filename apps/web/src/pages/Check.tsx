@@ -13,7 +13,7 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { ScanFeedback, ScanInput, ScanInputHandle } from '@/components/ScanInput';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
 import { CheckBadge, Field, Message, Notice } from '@/components/wms';
-import { MagicStage, TONES, type Tone } from '@/components/magic';
+import { MagicStage, Medallion, TONES, type Tone, SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import BlurText from '@/components/BlurText';
 import SpotlightCard from '@/components/SpotlightCard';
 import StarBorder from '@/components/StarBorder';
@@ -112,7 +112,7 @@ const toneClass = (tone: Tone | 'muted') => (tone === 'muted' ? 'bg-muted text-m
 
 const TABS: { key: CheckFilter; label: string; tone: Tone; empty: string }[] = [
   { key: 'PENDING', label: 'รอตรวจ', tone: 'star', empty: 'ไม่มีออเดอร์รอตรวจ ทุกออเดอร์ตรวจแล้ว' },
-  { key: 'MISMATCH', label: 'ไม่ครบ', tone: 'rose', empty: 'ไม่มีออเดอร์ที่ตรวจแล้วไม่ครบ' },
+  { key: 'MISMATCH', label: 'ไม่ตรงออเดอร์', tone: 'rose', empty: 'ไม่มีออเดอร์ที่ตรวจแล้วไม่ตรง' },
   { key: 'MATCH', label: 'ผ่านแล้ว', tone: 'mint', empty: 'ยังไม่มีออเดอร์ที่ตรวจผ่าน' },
   { key: 'ALL', label: 'ทั้งหมด', tone: 'plum', empty: 'ยังไม่มีออเดอร์ จดออเดอร์ที่หน้าออเดอร์สินค้าก่อน' },
 ];
@@ -362,7 +362,7 @@ export function CheckPage() {
     const current = TABS.find((t) => t.key === tab)!;
     return (
       <div className="mx-auto grid max-w-4xl gap-4">
-        <ScanInput ref={scanRef} label="สแกนบาร์โค้ดบนใบออเดอร์" placeholder="เช่น SO-2026-000012 หรือชื่อผู้สั่ง" onScan={handleScan} autoFocus />
+        <ScanInput ref={scanRef} label="สแกนบาร์โค้ดบนใบออเดอร์" placeholder="เลขออเดอร์หรือชื่อผู้สั่ง" hint="สแกนใบออเดอร์ หรือพิมพ์เลข/ชื่อผู้สั่งแล้วกด Enter" onScan={handleScan} autoFocus />
         <Notice message={message} />
         <section ref={listTop} className="grid scroll-mt-20 gap-3" aria-labelledby="check-list-title">
           <div className="flex flex-wrap items-end justify-between gap-2">
@@ -397,9 +397,10 @@ export function CheckPage() {
           ) : list && (
             <>
               {!list.rows.length && (
-                <div className="grid justify-items-center gap-2 rounded-xl border border-dashed border-border px-4 py-10 text-center">
+                <div className={`${SPELL_SLOT} grid justify-items-center gap-2 px-4 py-10 text-center`}>
+                  <SlotSparkles />
                   <SparklesIcon className="size-8 text-star-ink dark:text-star" aria-hidden />
-                  <p className="text-muted-foreground">{query ? 'ไม่พบออเดอร์ที่ตรงกับคำค้น ลองเลขออเดอร์หรือชื่อผู้สั่งอื่น' : current.empty}</p>
+                  <p className="text-muted-foreground">{query ? 'ไม่พบออเดอร์ที่ตรงกับคำค้น ลองเลขออเดอร์หรือชื่อผู้สั่งอื่น' : counts?.ALL === 0 ? 'ยังไม่มีออเดอร์ให้ตรวจ' : current.empty}</p>
                 </div>
               )}
               <ul className={cn('grid gap-2 sm:grid-cols-2', loadingList && 'opacity-60')} aria-busy={loadingList}>
@@ -409,7 +410,7 @@ export function CheckPage() {
                     <li key={o.id}>
                       <SpotlightCard className="h-full transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-star/60 motion-reduce:hover:translate-y-0">
                         <button type="button" onClick={() => openOrder(o)} className="relative flex h-full min-h-24 w-full items-center gap-3 p-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset">
-                          <span aria-hidden className={cn('grid size-12 shrink-0 place-items-center rounded-2xl', TONES[tone])}><ClipboardListIcon className="size-6" /></span>
+                          <Medallion tone={tone} icon={ClipboardListIcon} />
                           <span className="grid min-w-0 flex-1 gap-1">
                             <strong className="line-clamp-2 font-medium break-words">{o.customerName}</strong>
                             <span className="text-sm text-muted-foreground">{o.id} · {o.date} · {o.lines.length} รายการ</span>
@@ -517,7 +518,7 @@ export function CheckPage() {
           </div>
           <Card className="order-2">
             <CardContent className="grid gap-3">
-              <Field id="check-picker" label="ชื่อคนเบิก">
+              <Field id="check-picker" label="ชื่อผู้เบิกสินค้า">
                 <Input id="check-picker" className={touchInput} value={draft.pickerName} maxLength={100} placeholder="เช่น สมชาย" onChange={(e) => setDraft((d) => ({ ...d, pickerName: e.target.value }))} />
               </Field>
               <Field id="check-note" label="หมายเหตุ (ถ้ามี)">
@@ -577,10 +578,10 @@ export function CheckPage() {
       <div className="fixed inset-x-0 bottom-0 z-10 border-t border-on-sky/10 bg-brand px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] text-brand-foreground shadow-dock lg:hidden print:hidden">
         <div className="mx-auto grid max-w-3xl gap-2">
           <p className="text-sm" aria-live="polite">
-            ครบ <span className="font-heading font-semibold text-mint tabular-nums">{v.match}/{v.total}</span>
-            {v.short > 0 && <> · ยังไม่ครบ <span className="font-semibold text-kibble tabular-nums">{v.short}</span></>}
-            {v.over > 0 && <> · เกิน <span className="font-semibold text-rose tabular-nums">{v.over}</span></>}
-            {v.wrong > 0 && <> · ไม่ตรงออเดอร์ <span className="font-semibold text-rose tabular-nums">{v.wrong}</span></>}
+            ครบ <span className="font-heading font-semibold text-on-sky-mint tabular-nums">{v.match}/{v.total}</span>
+            {v.short > 0 && <> · ยังไม่ครบ <span className="font-semibold text-on-sky-kibble tabular-nums">{v.short}</span></>}
+            {v.over > 0 && <> · เกิน <span className="font-semibold text-on-sky-rose tabular-nums">{v.over}</span></>}
+            {v.wrong > 0 && <> · ไม่ตรงออเดอร์ <span className="font-semibold text-on-sky-rose tabular-nums">{v.wrong}</span></>}
           </p>
           {saveArea}
         </div>
@@ -598,8 +599,8 @@ function Constellation({ order, rows, extras, match, total, onClose, disabled }:
 }) {
   const starClass: Record<LineState, string> = {
     MATCH: 'fill-star text-star drop-shadow-[0_0_6px_color-mix(in_oklab,var(--pm-star)_70%,transparent)]',
-    SHORT: 'fill-kibble/30 text-kibble',
-    OVER: 'fill-rose text-rose',
+    SHORT: 'fill-on-sky-kibble/30 text-on-sky-kibble',
+    OVER: 'fill-on-sky-rose text-on-sky-rose',
     PENDING: 'text-on-sky/35',
   };
   return (
@@ -622,7 +623,7 @@ function Constellation({ order, rows, extras, match, total, onClose, disabled }:
             <StarIcon className={cn('size-6 transition-[color,fill,filter] duration-300', starClass[r.state])} aria-label={`${r.line.name}: ${r.state === 'MATCH' ? 'ครบ' : r.state === 'OVER' ? 'เกิน' : r.state === 'SHORT' ? 'ขาด' : 'ยังไม่ได้ตรวจ'}`} />
           </li>
         ))}
-        {Array.from({ length: extras }, (_, i) => <li key={`x${i}`}><XIcon className="size-6 text-rose" aria-label="ของที่ไม่ตรงกับออเดอร์" /></li>)}
+        {Array.from({ length: extras }, (_, i) => <li key={`x${i}`}><XIcon className="size-6 text-on-sky-rose" aria-label="ของที่ไม่ตรงกับออเดอร์" /></li>)}
       </ul>
     </MagicStage>
   );
@@ -633,15 +634,15 @@ function SaveArea({ allMatch, shortOnly, started, saving, confirming, problems, 
   allMatch: boolean; shortOnly: boolean; started: boolean; saving: boolean; confirming: boolean; problems: string[];
   onSave: () => void; onConfirm: () => void; onShortStock: () => void; onCancel: () => void;
 }) {
-  // ขาดอย่างเดียว: ของในคลังไม่พอ ยืนยันให้ตามที่มีได้เลย (นับเป็นตรวจผ่าน) หรือบันทึกเป็นไม่ครบให้คนเบิกไปหยิบเพิ่ม
+  // ขาดอย่างเดียว: ของในคลังไม่พอ ยืนยันให้ตามที่มีได้เลย (นับเป็นตรวจผ่าน) หรือบันทึกผล: ไม่ตรงออเดอร์ให้คนเบิกไปหยิบเพิ่ม
   if (confirming && shortOnly) {
     return (
       <div role="alert" className="grid gap-2 rounded-xl border border-kibble/55 bg-kibble-soft p-3 text-kibble-ink">
         <p className="flex items-start gap-2 text-sm font-semibold"><AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden />{problems.join(' · ')} ของในคลังไม่พอใช่ไหม</p>
-        <Button size="touch" className="bg-kibble text-white hover:bg-kibble/90" onClick={onShortStock}><PackageIcon />ของไม่พอ ยืนยันให้ตามที่มี</Button>
+        <Button size="touch" className="bg-on-sky-kibble text-on-kibble hover:bg-on-sky-kibble/90" onClick={onShortStock}><PackageIcon />ของไม่พอ ยืนยันให้ตามที่มี</Button>
         <div className="grid grid-cols-2 gap-2">
           <Button size="touch" variant="outline" onClick={onCancel}>ตรวจต่อ</Button>
-          <Button size="touch" variant="outline" className="border-rose/50 text-rose hover:bg-rose-soft hover:text-rose" onClick={onConfirm}>บันทึกเป็นไม่ครบ</Button>
+          <Button size="touch" variant="outline" className="border-rose/50 text-rose hover:bg-rose-soft hover:text-rose" onClick={onConfirm}>บันทึกผล: ไม่ตรงออเดอร์</Button>
         </div>
       </div>
     );
@@ -652,7 +653,7 @@ function SaveArea({ allMatch, shortOnly, started, saving, confirming, problems, 
         <p className="flex items-start gap-2 text-sm font-semibold"><AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden />ของยังไม่ตรงกับออเดอร์: {problems.join(' · ')}</p>
         <div className="grid grid-cols-2 gap-2">
           <Button size="touch" variant="outline" onClick={onCancel}>ตรวจต่อ</Button>
-          <Button size="touch" variant="destructive" onClick={onConfirm}>บันทึกเป็นไม่ครบ</Button>
+          <Button size="touch" variant="destructive" onClick={onConfirm}>บันทึกผล: ไม่ตรงออเดอร์</Button>
         </div>
       </div>
     );
@@ -738,7 +739,7 @@ function CheckRow({ id, name, code, unit, expected, total, totalUnit, value, onC
             <HandIcon className="size-4 shrink-0" aria-hidden />
             <span className="min-w-0 flex-1">นับเอง: {manualReason}</span>
             <Button type="button" variant="ghost" size="touch" className="-mr-2 px-2 text-kibble-ink hover:bg-kibble/15" disabled={disabled} onClick={() => onManual(null)}>
-              <RotateCcwIcon />ล้าง สแกนใหม่
+              <RotateCcwIcon />ล้างจำนวนแล้วสแกนใหม่
             </Button>
           </div>
         ) : asking ? (
@@ -774,7 +775,7 @@ function CheckResult({ check, order }: { check: PickCheck; order: SalesOrder }) 
     return () => clearTimeout(t);
   }, [check.status]);
   const diffs = check.lines.map((l) => ({ l, ...resultTally(l) })).filter((x) => x.actual !== x.expected);
-  const title = check.status === 'MATCH' ? `ของครบตาม ${order.id}` : check.status === 'PARTIAL' ? `ให้ตามที่มี ${order.id}: ของในคลังไม่พอ` : `บันทึกผลตรวจ ${order.id}: ไม่ครบ`;
+  const title = check.status === 'MATCH' ? `ของครบตาม ${order.id}` : check.status === 'PARTIAL' ? `ให้ตามที่มี ${order.id}: ของในคลังไม่พอ` : `บันทึกผลตรวจ ${order.id}: ไม่ตรงออเดอร์`;
   const subbed = check.lines.filter((l) => l.parts.length > 0);
   const manual = check.lines.filter((l) => l.manualReason);
   return (
@@ -935,7 +936,7 @@ function SubSizes({ line, subs, onChange, onRemove, onAdd, manual, disabled }: {
           <p className="text-sm text-muted-foreground">สแกนบาร์โค้ดขนาดที่ให้แทนได้เลย หรือแตะเลือกขนาด</p>
           {loading && <p className="flex items-center gap-2 text-sm"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden />กำลังโหลดขนาดบรรจุ…</p>}
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          {product && !base && <p className="text-sm text-muted-foreground">ไม่รู้จำนวนชิ้นของขนาดที่สั่ง ให้ขนาดอื่นแทนไม่ได้</p>}
+          {product && !base && <p className="text-sm text-muted-foreground">ไม่พบจำนวนชิ้นต่อหน่วยของขนาดที่สั่ง จึงใช้ขนาดอื่นแทนไม่ได้</p>}
           {product && base && !choices.length && <p className="text-sm text-muted-foreground">สินค้านี้ไม่มีขนาดอื่นให้เลือกแล้ว</p>}
           <div className="flex flex-wrap gap-2">
             {base && choices.map((x) => (

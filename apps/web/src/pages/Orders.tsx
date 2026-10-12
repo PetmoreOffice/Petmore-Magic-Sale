@@ -11,7 +11,7 @@ import { CheckBadge, Field, Message, Notice } from '@/components/wms';
 import { CustomerPicker } from '@/components/CustomerPicker';
 import { OrderBarcode } from '@/components/OrderBarcode';
 import { OrderCatalog } from '@/components/OrderCatalog';
-import { MagicStage } from '@/components/magic';
+import { MagicStage, SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import StarBorder from '@/components/StarBorder';
 import BlurText from '@/components/BlurText';
 import CountUp from '@/components/CountUp';
@@ -135,10 +135,10 @@ export function OrdersPage() {
   const creating = view === 'shop' || view === 'cart' || view === 'checkout';
 
   return (
-    <div className={cn('grid gap-5', view === 'shop' && lines.length > 0 && 'pb-24')}>
+    <div className={cn('grid gap-5', view === 'shop' && lines.length > 0 && 'pb-32')}>
       <MagicStage>
         <div className="grid gap-4">
-          <nav className="flex flex-wrap items-center gap-2" aria-label="หน้าจอออเดอร์">
+          <nav className="grid grid-cols-3 items-center gap-1 sm:flex sm:gap-2" aria-label="หน้าจอออเดอร์">
             {canCreate && <>
               <StageTab active={view === 'shop' && !selected} onClick={() => go('shop')} disabled={saving}><StoreIcon />เลือกสินค้า</StageTab>
               <StageTab active={(view === 'cart' || view === 'checkout') && !selected} onClick={() => go('cart')} disabled={saving}>
@@ -146,7 +146,7 @@ export function OrdersPage() {
                 {lines.length > 0 && <CartCount count={lines.length} inverted={(view === 'cart' || view === 'checkout') && !selected} />}
               </StageTab>
             </>}
-            <StageTab active={view === 'history' && !selected} className="sm:ml-auto" onClick={() => go('history')} disabled={saving}><ClipboardListIcon />ออเดอร์ย้อนหลัง</StageTab>
+            <StageTab active={view === 'history' && !selected} className="sm:ml-auto" onClick={() => go('history')} disabled={saving}><ClipboardListIcon /><span className="sm:hidden">ย้อนหลัง</span><span className="hidden sm:inline">ออเดอร์ย้อนหลัง</span></StageTab>
           </nav>
           {creating && !selected && canCreate && <Steps current={view} hasLines={lines.length > 0} onGo={go} />}
         </div>
@@ -209,7 +209,8 @@ export function OrdersPage() {
             </CardHeader>
             <CardContent>
               {!lines.length ? (
-                <div className="grid justify-items-center gap-3 rounded-lg border border-dashed border-border px-4 py-10 text-center">
+                <div className={`${SPELL_SLOT} grid justify-items-center gap-3 px-4 py-10 text-center`}>
+                  <SlotSparkles />
                   <ShoppingBasketIcon className="size-10 text-muted-foreground" aria-hidden />
                   <p className="text-muted-foreground">ตะกร้ายังว่าง เลือกสินค้าที่ผู้สั่งต้องการก่อน</p>
                   <Button size="touch" onClick={() => go('shop')}><StoreIcon />ไปเลือกสินค้า</Button>
@@ -222,7 +223,7 @@ export function OrdersPage() {
                         <div className="min-w-0 flex-1">
                           <p className="font-medium break-words">{line.name}</p>
                           <p className="text-sm text-muted-foreground tabular-nums">
-                            {(line.packCode || lineCode(line)) && <span className="font-mono">{line.packCode || lineCode(line)}</span>}
+                            {(line.packCode || lineCode(line)) && <span className="font-mono break-all">{line.packCode || lineCode(line)}</span>}
                             {!line.sku && <> · สินค้านอกทะเบียน</>}
                           </p>
                         </div>
@@ -355,7 +356,7 @@ function Summary({ count, lines, children }: { count: number; lines?: OrderLineI
             {lines.map((line, i) => (
               <li key={i} className="flex justify-between gap-3">
                 <span className="min-w-0 break-words">{line.name}</span>
-                <span className="shrink-0 font-semibold tabular-nums">{formatQty(line.qty)} {line.unit}</span>
+                <span className="max-w-[45%] text-right font-semibold tabular-nums [overflow-wrap:anywhere]">{formatQty(line.qty)} {line.unit}</span>
               </li>
             ))}
           </ul>
@@ -387,14 +388,14 @@ function OrderReceipt({ order, actions }: { order: SalesOrder; actions: ReactNod
       </CardHeader>
       <CardContent className="grid gap-5">
         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-          <div className="sm:col-span-2"><dt className="text-muted-foreground">ผู้สั่ง{order.customerCode && <> · <span className="font-mono">{order.customerCode}</span></>}</dt><dd className="font-heading text-lg font-semibold break-words">{order.customerName}</dd></div>
+          <div className="sm:col-span-2"><dt className="text-muted-foreground">ผู้สั่ง{order.customerCode && <> · <span className="font-mono break-all">{order.customerCode}</span></>}</dt><dd className="font-heading text-lg font-semibold break-words">{order.customerName}</dd></div>
           <div><dt className="text-muted-foreground">เบอร์ติดต่อ</dt><dd className="break-words">{order.phone || 'ไม่ได้ระบุ'}</dd></div>
           <div><dt className="text-muted-foreground">วันที่รับออเดอร์</dt><dd>{order.date}</dd></div>
           {/* ออเดอร์เก่าก่อนเลิกใช้ช่องนัดรับ ยังแสดงให้เห็น */}
           {order.dueDate && <div><dt className="text-muted-foreground">วันที่นัดรับ / ส่ง</dt><dd>{order.dueDate}</dd></div>}
         </dl>
         <div className="divide-y divide-border border-y border-border">
-          {order.lines.map((line) => <div key={line.lineNo} className="flex items-start justify-between gap-3 py-3 break-inside-avoid"><div className="min-w-0"><p className="font-medium break-words">{line.name}</p>{(line.packCode || lineCode(line)) && <p className="font-mono text-sm text-muted-foreground">{line.packCode || lineCode(line)}</p>}</div><strong className="shrink-0 tabular-nums">{formatQty(line.qty)} {line.unit}</strong></div>)}
+          {order.lines.map((line) => <div key={line.lineNo} className="flex items-start justify-between gap-3 py-3 break-inside-avoid"><div className="min-w-0"><p className="font-medium break-words">{line.name}</p>{(line.packCode || lineCode(line)) && <p className="font-mono break-all text-sm text-muted-foreground">{line.packCode || lineCode(line)}</p>}</div><strong className="max-w-[45%] text-right tabular-nums [overflow-wrap:anywhere]">{formatQty(line.qty)} {line.unit}</strong></div>)}
         </div>
         <p className="text-sm text-muted-foreground">รวม {order.lines.length} รายการ</p>
         {order.reference && <p className="text-sm break-words">อ้างอิง: {order.reference}</p>}
@@ -412,8 +413,8 @@ function StageTab({ active, className, children, ...props }: { active: boolean; 
       type="button"
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'inline-flex min-h-12 items-center gap-2 rounded-xl px-4 text-base font-semibold transition-colors outline-none focus-visible:ring-3 focus-visible:ring-star/60 disabled:opacity-60 [&_svg]:size-5',
-        active ? 'bg-star text-on-star shadow-[0_6px_18px_-6px_color-mix(in_oklab,var(--pm-star)_70%,transparent)]' : 'bg-on-sky/10 text-brand-foreground ring-1 ring-on-sky/15 hover:bg-on-sky/15',
+        'inline-flex min-h-12 items-center justify-center gap-1.5 rounded-lg px-2 text-sm font-semibold sm:gap-2 sm:px-4 sm:text-base transition-colors outline-none focus-visible:ring-3 focus-visible:ring-star/60 disabled:opacity-60 [&_svg]:hidden sm:[&_svg]:block [&_svg]:size-5',
+        active ? 'bg-on-sky/15 text-star ring-1 ring-star/50' : 'text-brand-foreground/80 hover:bg-on-sky/10 hover:text-brand-foreground',
         className,
       )}
       {...props}

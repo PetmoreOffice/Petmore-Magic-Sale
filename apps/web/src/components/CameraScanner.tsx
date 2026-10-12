@@ -3,6 +3,7 @@ import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser';
 import { AlertCircleIcon, XIcon } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Dialog } from 'radix-ui';
 
 interface Props {
   onResult: (code: string) => void;
@@ -11,14 +12,20 @@ interface Props {
 
 /** เปิดกล้องหลังของมือถือแล้วอ่านบาร์โค้ด/QR (EAN-13, Code128, QR ฯลฯ) */
 export function CameraScanner({ onResult, onClose }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [video, setVideo] = useState<HTMLVideoElement | null>(null);
+  const returnFocus = useRef(document.activeElement as HTMLElement | null);
   const resultRef = useRef(onResult);
   resultRef.current = onResult;
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
+    if (!video) return;
+    if (!window.isSecureContext) {
       setError('ใช้กล้องไม่ได้ เพราะเว็บนี้ไม่ได้เปิดผ่าน https:// ใช้หัวสแกนหรือพิมพ์รหัสแทน');
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError('เบราว์เซอร์นี้ไม่รองรับการเปิดกล้อง ใช้หัวสแกนหรือพิมพ์รหัสแทน');
       return;
     }
     const reader = new BrowserMultiFormatReader();
@@ -26,7 +33,7 @@ export function CameraScanner({ onResult, onClose }: Props) {
     let cancelled = false;
     let done = false;
     reader
-      .decodeFromConstraints({ video: { facingMode: { ideal: 'environment' } } }, videoRef.current!, (result, _err, c) => {
+      .decodeFromConstraints({ video: { facingMode: { ideal: 'environment' } } }, video, (result, _err, c) => {
         if (result && !done) {
           done = true;
           c.stop();
@@ -40,24 +47,27 @@ export function CameraScanner({ onResult, onClose }: Props) {
       })
       .catch((e: unknown) => {
         const name = e instanceof DOMException ? e.name : '';
-        setError(name === 'NotAllowedError' ? 'เบราว์เซอร์ไม่อนุญาตให้ใช้กล้อง เปิดสิทธิ์กล้องในการตั้งค่าเบราว์เซอร์แล้วลองใหม่' : 'เปิดกล้องไม่ได้ ปิดแอปอื่นที่ใช้กล้องอยู่แล้วลองใหม่ หรือพิมพ์รหัสแทน');
+        setError(name === 'NotAllowedError' ? 'เบราว์เซอร์ไม่อนุญาตให้ใช้กล้อง เปิดสิทธิ์กล้องในการตั้งค่าเบราว์เซอร์แล้วลองใหม่' : name === 'NotFoundError' ? 'ไม่พบกล้องบนอุปกรณ์นี้ ใช้หัวสแกนหรือพิมพ์รหัสแทน' : 'เปิดกล้องไม่ได้ ปิดแอปอื่นที่ใช้กล้องอยู่แล้วลองใหม่ หรือพิมพ์รหัสแทน');
       });
     return () => {
       cancelled = true;
       controls?.stop();
     };
-  }, []);
+  }, [video]);
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/85 p-4" role="dialog" aria-modal="true" aria-label="สแกนด้วยกล้อง">
-      <div className="relative flex w-full max-w-md flex-col gap-3">
+    <Dialog.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <Dialog.Portal>
+      <Dialog.Overlay className="fixed inset-0 z-50 bg-brand/90" />
+      <Dialog.Content aria-describedby={undefined} onCloseAutoFocus={(event) => { event.preventDefault(); returnFocus.current?.focus(); }} className="fixed top-1/2 left-1/2 z-50 flex max-h-[90dvh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 flex-col gap-3 overflow-y-auto rounded-xl bg-card p-4 shadow-stage">
+        <Dialog.Title className="font-heading text-lg font-semibold">สแกนด้วยกล้อง</Dialog.Title>
         {error ? (
           <Alert variant="destructive" role="alert">
             <AlertCircleIcon />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         ) : (
-          <video ref={videoRef} className="aspect-[3/4] w-full rounded-xl bg-black object-cover" muted playsInline />
+          <video ref={setVideo} className="aspect-[3/4] w-full rounded-xl bg-black object-cover" muted playsInline />
         )}
         {/* กรอบช่วยเล็งบาร์โค้ด */}
         {!error && (
@@ -67,7 +77,8 @@ export function CameraScanner({ onResult, onClose }: Props) {
           <XIcon />
           ปิดกล้อง
         </Button>
-      </div>
-    </div>
+      </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

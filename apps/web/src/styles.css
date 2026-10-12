@@ -10,7 +10,7 @@
    --pm-* คือสีต้นฉบับของธีม ส่วน token ของ shadcn (--background, --primary ฯลฯ) อ้างจาก --pm-* ทั้งหมด
    เปลี่ยนสีที่ --pm-* ที่เดียว ทั้งหน้าจอเดิมและคอมโพเนนต์ shadcn จะเปลี่ยนตาม */
 :root {
-  --pm-bg: #f5f2fb;
+  --pm-bg: #f7f4f8;
   --pm-surface: #ffffff;
   --pm-ink: #24183a;
   --pm-muted: #6c6082;
@@ -32,6 +32,10 @@
   /* มิ้นต์/คาราเมลที่อ่านได้บนท้องฟ้า (กลุ่มดาวตำแหน่งในหน้าจัดการผู้ใช้) เท่ากันทั้งสองโหมด */
   --pm-on-sky-mint: #6fd3b6;
   --pm-on-sky-kibble: #e8b07c;
+  --pm-on-sky-rose: #f5aac7;
+  --pm-on-kibble: #301909;
+  --pm-velvet: #4b244f;
+  --pm-stage-light: #b898cf;
   /* เงาของธีม: สีท้องฟ้ายามค่ำโหมดสว่าง ใช้ทั้งสองโหมด (ผ่าน shadow-lift / shadow-stage / shadow-dock) */
   --pm-shadow: #241a3d;
   --pm-kibble: #a8622a;
@@ -92,11 +96,11 @@
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --pm-bg: #141020;
-    --pm-surface: #1e1830;
+    --pm-bg: #17121e;
+    --pm-surface: #241c2d;
     --pm-ink: #efe9fb;
     --pm-muted: #a79cbd;
-    --pm-line: #342b4a;
+    --pm-line: #403349;
     --pm-input: #43375e;
     --pm-accent: #b9a0f0;
     --pm-accent-ink: #1a1328;
@@ -137,6 +141,8 @@
   --color-on-sky: var(--pm-on-sky);
   --color-on-sky-mint: var(--pm-on-sky-mint);
   --color-on-sky-kibble: var(--pm-on-sky-kibble);
+  --color-on-sky-rose: var(--pm-on-sky-rose);
+  --color-on-kibble: var(--pm-on-kibble);
   /* lift = การ์ดลอยตอน hover, stage = เวทีท้องฟ้า, dock = แถบล่างติดขอบจอ */
   --shadow-lift: 0 12px 28px -16px color-mix(in oklab, var(--pm-shadow) 50%, transparent);
   --shadow-stage: 0 10px 30px -12px color-mix(in oklab, var(--pm-shadow) 55%, transparent);
@@ -240,28 +246,14 @@
   }
 }
 
-/* เวทีสแกน (ScanInput): ดาวเลื่อนช้าๆ + เลเซอร์ทอง + แสงตอบรับ
+/* เวทีสแกน (ScanInput): เลเซอร์ทอง + แสงตอบรับ (ฉากดาว/กรอบใช้ StageDecor ชุดเดียวกับ MagicStage)
    ใช้ transform/opacity เท่านั้น ให้การ์ดจอทำงาน ไม่ทำให้ Handheld หน่วง */
 @layer components {
-  .scan-stage-stars {
-    position: absolute;
-    inset: -1260px 0 0 0; /* สูงกว่าเวที 1 รอบลาย (1260 = ค.ร.น. ของ 90 และ 140) เลื่อนวนได้ไม่สะดุด */
-    z-index: -1;
-    pointer-events: none;
-    background-image:
-      radial-gradient(1.5px 1.5px at 20px 30px, var(--pm-star) 50%, transparent 51%),
-      radial-gradient(1px 1px at 70px 75px, rgb(255 255 255 / 0.8) 50%, transparent 51%),
-      radial-gradient(1px 1px at 40px 110px, rgb(255 255 255 / 0.5) 50%, transparent 51%),
-      radial-gradient(2px 2px at 115px 20px, color-mix(in oklab, var(--pm-star) 70%, transparent) 50%, transparent 51%);
-    background-size: 90px 90px, 90px 90px, 140px 140px, 140px 140px;
-    animation: stage-drift 120s linear infinite;
-    will-change: transform;
-  }
   .scan-laser {
     position: absolute;
     inset-inline: 10px;
-    top: calc(50% - 6px);
-    height: 12px;
+    bottom: 2px;
+    height: 3px;
     pointer-events: none;
     border-radius: 999px;
     /* เส้นกลางคม 2px กับแสงจางสองข้าง วาดด้วย gradient แทนเงาเรือง */
@@ -272,19 +264,14 @@
   }
 }
 
-@keyframes stage-drift {
-  to {
-    transform: translateY(1260px);
-  }
-}
 @keyframes scan-laser {
   0%,
   100% {
-    transform: translateY(-14px);
+    transform: scaleX(0.4);
     opacity: 0.35;
   }
   50% {
-    transform: translateY(14px);
+    transform: scaleX(1);
     opacity: 1;
   }
 }

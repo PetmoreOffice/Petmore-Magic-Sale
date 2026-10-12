@@ -4,7 +4,7 @@ import { cn } from 'cn';
 import type { PackSize, PickCheckStatus, StockStatus } from '@petmore/shared';
 import { breakdown, formatQty } from '@/lib/packs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { Seal, SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,10 +24,13 @@ export function Field({ id, label, children, className }: { id: string; label: s
 }
 
 export function StatusBadge({ status }: { status: StockStatus }) {
-  return <Badge variant={status === 'DM' ? 'destructive' : 'secondary'}>{status}</Badge>;
+  return status === 'DM' ? <Seal tone="rose" state="broken">DM</Seal> : <Seal tone="mint">{status}</Seal>;
 }
 
-/** กล่องแสดงสิ่งที่สแกนแล้ว: เส้นประตอนว่าง เปลี่ยนเป็นกรอบทองพร้อมประกายเมื่อสแกนเจอ */
+/**
+ * กล่องแสดงสิ่งที่สแกนแล้ว ("วงเวทรอร่าย"): ตอนว่างเป็นกรอบเส้นประทองจาง ไอคอนอยู่ในวงประ ประกายเส้นประที่มุม
+ * สแกนเจอแล้วกรอบทองเต็ม วงไอคอนเป็นเส้นเต็ม ประกายมุมเต็มดวง พร้อมประกายระเบิด (SparkBurst)
+ */
 export function PickTile({
   icon,
   label,
@@ -47,12 +50,16 @@ export function PickTile({
   return (
     <div
       className={cn(
-        'relative flex min-w-0 items-start gap-3 rounded-xl border-2 p-3 transition-colors',
-        ok ? 'border-star bg-star-soft' : 'border-dashed border-border',
+        'flex min-w-0 items-start gap-3 p-3 pr-7 transition-colors',
+        ok ? 'relative rounded-xl border border-star bg-star-soft shadow-[inset_0_1px_0_color-mix(in_oklab,white_45%,transparent)] dark:shadow-none' : SPELL_SLOT,
       )}
     >
       {sparkRef && <SparkBurst ref={sparkRef} />}
-      <span className={cn('mt-0.5 shrink-0', ok ? 'text-star-ink' : 'text-muted-foreground')} aria-hidden="true">
+      <SlotSparkles filled={ok} />
+      <span className={cn('relative grid size-10 shrink-0 place-items-center', ok ? 'text-star-ink dark:text-star' : 'text-muted-foreground')} aria-hidden="true">
+        <svg viewBox="0 0 40 40" className="absolute inset-0 size-full">
+          <circle cx="20" cy="20" r="18.5" fill="none" stroke="currentColor" strokeOpacity={ok ? 0.7 : 0.5} strokeWidth={1.2} strokeDasharray={ok ? undefined : '2.5 3.5'} />
+        </svg>
         {icon}
       </span>
       <div className="grid min-w-0 gap-0.5">
@@ -143,8 +150,9 @@ export function QtyStepper({ id, value, onChange, label, min = 1, max = 100_000_
 
 /** ป้ายผลตรวจของเบิกล่าสุดของออเดอร์: ครบ (มิ้นต์) / ของไม่พอ ให้ตามที่มี (คาราเมล) / ไม่ครบ (แดง) / รอตรวจ */
 export function CheckBadge({ check, className }: { check: { status: PickCheckStatus } | null | undefined; className?: string }) {
-  if (!check) return <Badge variant="outline" className={className}>รอตรวจ</Badge>;
-  if (check.status === 'MATCH') return <Badge className={cn('bg-mint-soft text-mint', className)}><CheckCircle2Icon />ตรวจแล้ว ครบ</Badge>;
-  if (check.status === 'PARTIAL') return <Badge className={cn('bg-kibble-soft text-kibble-ink', className)}><CheckCircle2Icon />ของไม่พอ ให้ตามที่มี</Badge>;
-  return <Badge variant="destructive" className={className}><AlertCircleIcon />ตรวจแล้ว ไม่ครบ</Badge>;
+  // รูปประกายบอกสถานะได้แม้ไม่เห็นสี: เส้นประ = ยังไม่ร่าย, เต็ม = ครบ, ครึ่ง = ให้ตามที่มี, ขีดฆ่า = ไม่ตรง
+  if (!check) return <Seal tone="plum" state="outline" className={className}>รอตรวจ</Seal>;
+  if (check.status === 'MATCH') return <Seal tone="mint" className={className}>ตรวจแล้ว ครบ</Seal>;
+  if (check.status === 'PARTIAL') return <Seal tone="kibble" state="half" className={className}>ของไม่พอ ให้ตามที่มี</Seal>;
+  return <Seal tone="rose" state="broken" className={className}>ตรวจแล้ว ไม่ตรงออเดอร์</Seal>;
 }

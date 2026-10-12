@@ -35,6 +35,7 @@ export function StockPage() {
 
   async function search(code: string): Promise<ScanFeedback> {
     const n = await load(code);
+    if (n === null) return { ok: false, text: 'ค้นหาสต็อกไม่สำเร็จ ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง' };
     // ไม่เจออะไรเลย = รหัสผิดหรือไม่มีสต็อก บอกเหตุผลใต้ช่องสแกนด้วย ไม่สั่นแดงเฉยๆ
     return n ? { ok: true, text: `${code} · ${n.toLocaleString('th-TH')} รายการ` } : { ok: false, text: `ไม่พบสต็อกที่ตรงกับ “${code}”` };
   }
@@ -49,7 +50,7 @@ export function StockPage() {
     void load('');
   }, []);
 
-  const total = rows?.reduce((sum, r) => sum + r.qty, 0) ?? 0;
+
   return (
     <div className="grid gap-4">
       {/* ช่องเดียวใช้ได้ทั้งสแกนบาร์โค้ด/ป้าย Location และพิมพ์คำค้น */}
@@ -92,7 +93,7 @@ export function StockPage() {
               สต็อกคงเหลือ
             </CardTitle>
             <CardDescription className="tabular-nums" role="status">
-              {loading ? 'กำลังค้นหาสต็อก…' : `${rows.length.toLocaleString('th-TH')} รายการ · รวม ${total.toLocaleString('th-TH')} หน่วยนับสต็อก`}
+              {loading ? 'กำลังค้นหาสต็อก…' : `${rows.length.toLocaleString('th-TH')} รายการที่แสดง${rows.length >= 1000 ? ' · แสดงสูงสุด 1,000 รายการ ระบุคำค้นเพิ่มเพื่อจำกัดผลลัพธ์' : ''}`}
             </CardDescription>
           </CardHeader>
           <CardContent>

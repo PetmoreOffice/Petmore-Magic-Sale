@@ -14,7 +14,7 @@ import { Input } from '@/components/ui/input';
 import { ScanFeedback, ScanInput, ScanInputHandle } from '@/components/ScanInput';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
 import { CheckBadge, Field, Message, Notice } from '@/components/wms';
-import { MagicStage, TONES, type Tone } from '@/components/magic';
+import { MagicStage, Medallion, ToneChip, TONES, type Tone, SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import BlurText from '@/components/BlurText';
 import SpotlightCard from '@/components/SpotlightCard';
 import { defaultPack, formatQty } from '@/lib/packs';
@@ -334,13 +334,13 @@ export function ReturnsPage() {
             </div>
             {loading && !orders ? <div className="grid gap-2" aria-hidden>{[0, 1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-xl bg-muted/60" />)}</div> : orders && (
               <>
-                {!orders.rows.length && <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-muted-foreground">{query ? 'ไม่พบออเดอร์ที่ตรงกับคำค้น ลองเลขออเดอร์หรือชื่อผู้สั่งอื่น' : 'ยังไม่มีออเดอร์ คืนของด้วยใบคืนอิสระได้'}</p>}
+                {!orders.rows.length && <p className={`${SPELL_SLOT} px-4 py-8 text-center text-muted-foreground`}><SlotSparkles />{query ? 'ไม่พบออเดอร์ที่ตรงกับคำค้น ลองเลขออเดอร์หรือชื่อผู้สั่งอื่น' : 'ยังไม่มีออเดอร์ คืนของด้วยใบคืนอิสระได้'}</p>}
                 <ul className={cn('grid gap-2', loading && 'opacity-60')}>
                   {orders.rows.map((o) => (
                     <li key={o.id}>
                       <SpotlightCard className="transition-[border-color] hover:border-star/60">
                         <button type="button" onClick={() => void openOrder(o)} className="relative flex min-h-20 w-full items-center gap-3 p-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset">
-                          <span aria-hidden className={cn('grid size-11 shrink-0 place-items-center rounded-2xl', TONES.kibble)}><ClipboardListIcon className="size-5" /></span>
+                          <Medallion tone="kibble" icon={ClipboardListIcon} />
                           <span className="grid min-w-0 flex-1 gap-1">
                             <strong className="line-clamp-1 font-medium">{o.customerName}</strong>
                             <span className="text-sm text-muted-foreground">{o.id} · {o.date} · {o.lines.length} รายการ</span>
@@ -363,7 +363,7 @@ export function ReturnsPage() {
           </section>
           <section className="grid gap-3" aria-labelledby="ret-history">
             <h2 id="ret-history" className="font-heading text-xl font-semibold">ใบคืนล่าสุด</h2>
-            {returns && !returns.rows.length && <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">ยังไม่มีใบคืนสินค้า</p>}
+            {returns && !returns.rows.length && <p className={`${SPELL_SLOT} px-4 py-8 text-center text-sm text-muted-foreground`}><SlotSparkles />ยังไม่มีใบคืนสินค้า</p>}
             <ul className="grid gap-2">
               {returns?.rows.map((r) => {
                 const good = r.lines.filter((l) => l.goodQty > 0).length, bad = r.lines.filter((l) => l.damagedQty > 0).length;
@@ -372,7 +372,7 @@ export function ReturnsPage() {
                     <button type="button" onClick={() => setSaved(r)} className="grid w-full gap-1 rounded-xl border border-border bg-card p-3 text-left outline-none hover:border-star/50 focus-visible:ring-3 focus-visible:ring-ring/50">
                       <span className="flex items-center justify-between gap-2">
                         <span className="font-mono text-sm">{r.id}</span>
-                        <span className={cn('rounded-full px-2 py-0.5 text-xs font-semibold', TONES[REASON_TONE[r.reason]])}>{RETURN_REASONS[r.reason]}</span>
+                        <ToneChip tone={REASON_TONE[r.reason]}>{RETURN_REASONS[r.reason]}</ToneChip>
                       </span>
                       <span className="line-clamp-1 text-sm">{r.orderId ? `${r.orderId} · ${r.customerName}` : 'ใบคืนอิสระ'}{r.returnerName && ` · ${r.returnerName}`}</span>
                       <span className="text-xs text-muted-foreground">{formatTime(r.createdAt)} · {r.lines.length} รายการ{bad > 0 ? ` · เสียหาย ${bad}` : ''}{good > 0 && bad > 0 ? '' : ''}</span>
@@ -394,9 +394,12 @@ export function ReturnsPage() {
   const overLimit = draft.rows.some((r) => num(r.good) + num(r.damaged) > remainingOf(r) + 0.0005);
   const canSave = totals.lines > 0 && !overLimit && !saving;
   const saveButton = (
+    <div className="grid gap-2">
+    <p className="text-sm opacity-90">บันทึกประวัติการคืนเท่านั้น ยังไม่เพิ่มสต็อกในคลัง</p>
     <Button size="touch" className="w-full bg-star text-on-star hover:bg-star/90" disabled={!canSave} onClick={() => void save()}>
       {saving ? <><LoaderCircleIcon className="animate-spin" />กำลังบันทึกใบคืน…</> : <><CheckIcon />บันทึกใบคืน ({totals.lines} รายการ)</>}
     </Button>
+    </div>
   );
 
   return (
@@ -477,7 +480,7 @@ export function ReturnsPage() {
                   ))}
                 </div>
               </div>
-              <Field id="ret-name" label="ชื่อคนคืน">
+              <Field id="ret-name" label="ชื่อผู้คืนสินค้า">
                 <Input id="ret-name" className={touchInput} value={draft.returnerName} maxLength={100} placeholder="เช่น สมชาย" onChange={(e) => setDraft((d) => ({ ...d, returnerName: e.target.value }))} />
               </Field>
               <Field id="ret-note" label="หมายเหตุ (ถ้ามี)">
@@ -504,7 +507,8 @@ export function ReturnsPage() {
             }} />
           )}
           {mode === 'free' && !draft.rows.length && !manualOpen && (
-            <div className="grid justify-items-center gap-2 rounded-xl border border-dashed border-border px-4 py-10 text-center">
+            <div className={`${SPELL_SLOT} grid justify-items-center gap-2 px-4 py-10 text-center`}>
+              <SlotSparkles />
               <SparklesIcon className="size-8 text-star-ink dark:text-star" aria-hidden />
               <p className="text-muted-foreground">สแกนของที่คืนได้เลย สแกนซ้ำเพื่อเพิ่มจำนวน หรือพิมพ์ชื่อสินค้าเพื่อค้นหา</p>
             </div>
@@ -548,7 +552,7 @@ function StartCard({ icon: Icon, tone, title, text, hint, action, onClick }: {
 }) {
   return (
     <div className="flex items-start gap-4 rounded-xl border border-border bg-card p-4">
-      <span aria-hidden className={cn('grid size-12 shrink-0 place-items-center rounded-2xl', TONES[tone])}><Icon className="size-6" /></span>
+      <Medallion tone={tone} icon={Icon} />
       <div className="grid min-w-0 flex-1 gap-2">
         <div>
           <p className="font-heading text-lg font-semibold">{title}</p>
@@ -662,7 +666,7 @@ function ReturnReceipt({ ret, celebrate }: { ret: ProductReturn; celebrate: bool
               <CardTitle role="heading" aria-level={2}>ใบคืนสินค้า {ret.id}</CardTitle>
               <CardDescription>{formatTime(ret.createdAt)} · {RETURN_REASONS[ret.reason]}{ret.returnerName && ` · คืนโดย ${ret.returnerName}`}</CardDescription>
             </div>
-            <span className={cn('rounded-full px-3 py-1 text-sm font-semibold', TONES[REASON_TONE[ret.reason]])}>{ret.orderId ? `จาก ${ret.orderId}` : 'ใบคืนอิสระ'}</span>
+            <ToneChip tone={REASON_TONE[ret.reason]} className="h-7 px-3 text-sm">{ret.orderId ? `จาก ${ret.orderId}` : 'ใบคืนอิสระ'}</ToneChip>
           </div>
           {ret.orderId && <p className="text-sm">{ret.customerName}</p>}
         </CardHeader>

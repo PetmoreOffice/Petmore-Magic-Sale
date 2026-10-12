@@ -6,6 +6,7 @@ import {
 import { cn } from 'cn';
 import { NO_PRODUCT_TYPE, TYPE_GROUPS, typeGroup, type ProductType, type TypeGroupKey } from '@petmore/shared';
 import { Button } from '@/components/ui/button';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { TONES, toneFor } from '@/components/magic';
 
 /**
@@ -94,7 +95,17 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
 
   if (!group) {
     return (
-      <div role="radiogroup" aria-label="หมวดสินค้า" className="grid grid-cols-4 gap-2 sm:grid-cols-6 lg:grid-cols-11">
+      <>
+      <div className="sm:hidden">
+        <NativeSelect size="touch" className="w-full" aria-label="หมวดสินค้า" value="" disabled={disabled} onChange={(event) => {
+          const next = groups.find((g) => g.key === event.target.value);
+          onChange(next ? { group: next.key, type: next.types.length === 1 ? next.types[0].name : '', sub: '' } : NO_FILTER);
+        }}>
+          <NativeSelectOption value="">ทุกหมวด · {total.toLocaleString('th-TH')} รายการ</NativeSelectOption>
+          {groups.map((g) => <NativeSelectOption key={g.key} value={g.key}>{g.name} · {g.count.toLocaleString('th-TH')}</NativeSelectOption>)}
+        </NativeSelect>
+      </div>
+      <div role="radiogroup" aria-label="หมวดสินค้า" className="hidden gap-2 sm:grid sm:grid-cols-3 lg:grid-cols-6">
         <GroupTile selected icon={LayoutGridIcon} tone="star" label="ทุกหมวด" count={total} disabled={disabled} onClick={() => onChange(NO_FILTER)} />
         {groups.map((g) => (
           <GroupTile
@@ -110,6 +121,7 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
           />
         ))}
       </div>
+      </>
     );
   }
 
@@ -136,13 +148,21 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
         </div>
       )}
       {group.types.length > 1 && !type && (
-        <div role="radiogroup" aria-label={`ชนิดสินค้าในหมวด ${group.name}`} className="flex flex-wrap gap-2">
+        <>
+        <div className="sm:hidden">
+          <NativeSelect size="touch" className="w-full" aria-label={`ชนิดสินค้าในหมวด ${group.name}`} value="" disabled={disabled} onChange={(event) => onChange({ group: group.key, type: event.target.value, sub: '' })}>
+            <NativeSelectOption value="">ทุกชนิด</NativeSelectOption>
+            {group.types.map((t) => <NativeSelectOption key={t.name} value={t.name}>{t.name} · {t.count.toLocaleString('th-TH')}</NativeSelectOption>)}
+          </NativeSelect>
+        </div>
+        <div role="radiogroup" aria-label={`ชนิดสินค้าในหมวด ${group.name}`} className="hidden flex-wrap gap-2 sm:flex">
           <TypeChip selected={!value.type} label="ทุกชนิด" count={group.count} disabled={disabled} onClick={() => onChange({ group: group.key, type: '', sub: '' })} />
           {group.types.map((t) => (
             <TypeChip key={t.name} selected={value.type === t.name} icon={typeIcon(t.name)} label={shortName(t.name)} title={t.name} count={t.count} disabled={disabled}
               onClick={() => onChange({ group: group.key, type: t.name, sub: '' })} />
           ))}
         </div>
+        </>
       )}
       {type && type.subs.length > 1 && (
         <div role="radiogroup" aria-label={`ชนิดย่อยของ ${type.name}`} className="flex flex-wrap gap-1.5">
@@ -154,7 +174,7 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
   );
 }
 
-function GroupTile({ selected, onClick, icon: Icon, tone, label, count, disabled }: {
+function GroupTile({ selected, onClick, icon: Icon, label, count, disabled }: {
   selected: boolean; onClick: () => void; icon: LucideIcon; tone: keyof typeof TONES; label: string; count: number; disabled?: boolean;
 }) {
   return (
@@ -165,14 +185,13 @@ function GroupTile({ selected, onClick, icon: Icon, tone, label, count, disabled
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'grid min-h-24 content-start justify-items-center gap-1 rounded-xl border-2 px-1 py-2 text-center transition-[border-color,background-color,transform] outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60',
-        'hover:-translate-y-0.5 motion-reduce:hover:translate-y-0',
-        selected ? 'border-star bg-star-soft' : 'border-border bg-card hover:border-star/50',
+        'flex min-h-12 min-w-0 items-center gap-2 rounded-lg border px-2 py-2 text-left transition-colors outline-none focus-visible:ring-3 focus-visible:ring-primary/50 disabled:opacity-60',
+        selected ? 'border-primary bg-secondary' : 'border-border bg-card hover:border-primary/50',
       )}
     >
-      <span className={cn('grid size-11 place-items-center rounded-full', TONES[tone])}><Icon className="size-5" aria-hidden /></span>
-      <span className="line-clamp-2 text-xs leading-tight font-semibold sm:text-sm">{label}</span>
-      <span className="text-[11px] text-muted-foreground tabular-nums">{count.toLocaleString('th-TH')}</span>
+      <Icon className="size-4 shrink-0 text-primary" aria-hidden />
+      <span className="min-w-0 flex-1 text-sm font-medium [overflow-wrap:anywhere]">{label}</span>
+      <span className="hidden text-xs text-muted-foreground tabular-nums xl:inline">{count.toLocaleString('th-TH')}</span>
     </button>
   );
 }
@@ -209,7 +228,7 @@ function SubChip({ selected, onClick, label, count, disabled }: { selected: bool
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        'flex min-h-12 shrink-0 snap-start items-center gap-1.5 rounded-full px-3.5 text-sm whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60',
+        'flex min-h-12 max-w-full items-center gap-1.5 rounded-lg px-3.5 py-2 text-left text-sm [overflow-wrap:anywhere] transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:opacity-60',
         selected ? 'bg-plum text-primary-foreground font-semibold' : 'bg-plum-soft text-plum hover:brightness-95',
       )}
     >

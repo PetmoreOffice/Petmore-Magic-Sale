@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeftIcon, CheckIcon, LoaderCircleIcon, PrinterIcon, SearchIcon, TagIcon, XIcon } from 'lucide-react';
 import { cn } from 'cn';
+import { SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import type { Location, StorageWorkspace } from '@petmore/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -213,7 +214,7 @@ export function LabelsPage() {
       )}
 
       {workspace && !warehouse && (
-        <p className="rounded-xl border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">เลือกคลังด้านบนก่อน แล้วจะแสดง Location ของคลังนั้นให้เลือกพิมพ์ป้าย</p>
+        <p className={`${SPELL_SLOT} px-4 py-8 text-center text-sm text-muted-foreground`}><SlotSparkles />เลือกคลังด้านบนก่อน แล้วจะแสดง Location ของคลังนั้นให้เลือกพิมพ์ป้าย</p>
       )}
 
       {workspace && warehouse && (

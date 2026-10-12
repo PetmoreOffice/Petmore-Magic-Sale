@@ -1,5 +1,30 @@
 # Existing Petmore interface
 
+## Magician stage refinement — 2026-10-12
+
+The current visual direction is a readable magician's stage: velvet plum at the edges, a quiet overhead light, sparse static stars and pet-store details. Keep working surfaces flat and legible. `--pm-velvet` and `--pm-stage-light` are stable stage colors in both modes; `on-sky-mint`, `on-sky-kibble`, and `on-sky-rose` are the foregrounds for status text on night backgrounds. Gold is strongest on the next action, not every selected filter.
+
+- Home now has context + work links in the stage, followed by a two-column desktop composition: sequential sales rows on the left and a flat warehouse list on the right. Mobile stacks these groups. System tools sit below a divider.
+- The shell has a permission-filtered shadcn Sheet menu accessible from every page, plus a skip link. On phones, logout lives in this menu and the logo is hidden on subpages so the page title fits.
+- Orders tabs are quiet navigation. On phones category and initial type selection use native selects; desktop uses compact rows of category controls. Product codes and long units wrap inside cart and receipt layouts.
+- Scan feedback uses a slim light below the input text rather than a laser across it. Shared stage stars are static. React Bits SpotlightCard stays as restrained pointer feedback; Galaxy respects live reduced-motion changes.
+- Copy uses “ไม่ตรงออเดอร์” for MISMATCH; “ครบ” remains specific to MATCH. Return saving explains before submission that inventory does not change. Stock shows the number of displayed rows and its 1,000-row limit rather than summing unlike units.
+- References: Vercel Next.js & shadcn/ui Admin Dashboard for navigation/content organization; shadcn Sheet/Dialog/NativeSelect for accessible controls; React Bits SpotlightCard for light feedback. Keep the existing React/Vite architecture and dependencies.
+
+## Magic labels (ป้าย) — 2026-10-12
+
+Every label shares one authored mark: the four-point `Sparkle` (`components/magic.tsx`), never a generic icon.
+- `Seal` is the status badge everywhere: enamel pill (tone soft + inset hairline + top highlight) with a sparkle disc. The sparkle's shape carries the state, not just color: dashed outline = not yet (รอตรวจ, missing fields), solid = done (ครบ, FG), half = given what we have (PARTIAL), struck = broken (ไม่ตรงออเดอร์, DM, ปิดใช้งาน). `CheckBadge`/`StatusBadge` render Seals; `ToneChip` got the same enamel edge.
+- `MagicStage` is a spellbook page: inner gold hairline frame at 8px with sparkles at the four corners, a static wizard-hat constellation top-right, overhead light, velvet edges, faint paw. No motion.
+- `ScanInput` (scan box on every page) uses the same stage: `STAGE_BACKGROUND` + `StageDecor` (frame, corner sparkles, static stars, small paw) without the hat constellation, since the status pill sits top-right. The old drifting `.scan-stage-stars` is gone; stage stars are static everywhere.
+- Empty boxes are "spells not yet cast": `SPELL_SLOT` (dashed gold border on faint star-soft) + `SlotSparkles` (outline sparkles at top-right and bottom-left). `PickTile` (Receive/Move) uses it while empty, its icon sitting in a dashed circle; once scanned it turns into a solid gold frame with a solid ring and a solid corner sparkle. Every empty-state box (orders, check, returns, labels) uses the same slot.
+- Order tiles in `/check` and `/returns` and the returns start cards also use `Medallion`; return reason chips are `ToneChip`s.
+- Menu icons sit in a `Medallion` (magic-circle tick ring around the tone disc). The sales flow joins its three medallions with a dashed gold star trail; cards get a gold border, lift, and a corner sparkle on hover/focus.
+- Printed `LocationLabel` stays pure black on white: sparkles flank "Petmore Magic Sale", a spellbook divider (rule + sparkles) sits between code and location name ending 3cqw short of the QR, and one sparkle sits on the top-left frame corner. Nothing new near the QR or barcode quiet zones.
+- Preview every label without logging in at `/dev/labels` (dev server only; excluded from production builds).
+
+The notes below record earlier surfaces; where they differ, this refinement is the current authority.
+
 Source of authority: src/styles.css, src/components/ui, src/components/wms.tsx, and CLAUDE.md.
 
 - Operative Thai warehouse UI, narrow max-w-3xl shell, single page h1 in the shell.
