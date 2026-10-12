@@ -22,6 +22,7 @@ function qtyValue(value: unknown, label: string): number {
  * คืนสินค้า: คืนจากออเดอร์ (เบิกเกิน/ขายไม่หมด) หรือใบคืนอิสระ (ปิดงานอีเว้นท์)
  * แยกของดี (FG) / ของเสียหาย (DM) ตอนนี้บันทึกประวัติอย่างเดียว ไม่เปลี่ยนยอดสต็อก
  * คืนจากออเดอร์ห้ามเกินที่เบิกไป: ยอดเบิก = ยอดที่นับได้จากผลตรวจของเบิกล่าสุด (ยังไม่ตรวจใช้ยอดในออเดอร์)
+ * รายการที่ตรวจแล้วให้ขนาดอื่นแทน เบิก/คืนนับเป็นชิ้น
  */
 @Injectable()
 export class ReturnsService {
@@ -63,21 +64,41 @@ export class ReturnsService {
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้ ตรวจเลขออเดอร์แล้วลองอีกครั้ง');
     const check = await db.pickCheck.findFirst({ where: { orderId }, orderBy: { createdAt: 'desc' }, include: { lines: true } });
     const returned = await db.returnLine.groupBy({
-      by: ['orderLineNo'], where: { ret: { orderId }, orderLineNo: { not: null } }, _sum: { goodQty: true, damagedQty: true },
+      by: ['orderLineNo', 'inPieces'], where: { ret: { orderId }, orderLineNo: { not: null } }, _sum: { goodQty: true, damagedQty: true },
     });
-    return {
-      orderId,
-      checked: !!check,
-      lines: order.lines.sort((a, b) => a.lineNo - b.lineNo).map((l) => {
-        const counted = check?.lines.find((c) => c.orderLineNo === l.lineNo);
-        const back = returned.find((r) => r.orderLineNo === l.lineNo);
-        return {
-          orderLineNo: l.lineNo,
-          taken: Number(counted ? counted.actualQty : l.qty),
-          returned: Number(back?._sum.goodQty ?? 0) + Number(back?._sum.damagedQty ?? 0),
-        };
-      }),
-    };
+    const lines: OrderReturnSummary['lines'] = [];
+    for (const l of order.lines.sort((a, b) => a.lineNo - b.lineNo)) {
+      const counted = check?.lines.find((c) => c.orderLineNo === l.lineNo);
+      const sum = (inPieces: boolean) => {
+        const r = returned.find((x) => x.orderLineNo === l.lineNo && x.inPieces === inPieces);
+        return new Prisma.Decimal(r?._sum.goodQty ?? 0).plus(r?._sum.damagedQty ?? 0);
+      };
+      const backPieces = sum(true), backUnits = sum(false);
+      // ผลตรวจล่าสุดให้ขนาดอื่นแทน = นับเป็นชิ้นทั้งหมด (เบิก 36 ชิ้น ไม่ใช่ 0.75 ลัง)
+      if (counted?.unitPieces && counted.actualPieces) {
+        lines.push({
+          orderLineNo: l.lineNo, unit: 'ชิ้น', pieces: counted.unitPieces.toNumber(),
+          taken: counted.actualPieces.toNumber(), returned: backPieces.plus(backUnits.times(counted.unitPieces)).toNumber(),
+        });
+        continue;
+      }
+      // ตรวจใหม่เป็นหน่วยที่สั่งหลังเคยคืนเป็นชิ้น: แปลงชิ้นที่คืนไปแล้วกลับด้วยจำนวนชิ้นจากทะเบียน
+      let back = backUnits;
+      if (!backPieces.isZero()) {
+        const per = await this.piecesPerUnit(db, l.sku, l.packCode);
+        back = back.plus(per ? backPieces.dividedBy(per).toDecimalPlaces(3) : backPieces);
+      }
+      lines.push({ orderLineNo: l.lineNo, unit: l.unit, pieces: null, taken: Number(counted ? counted.actualQty : l.qty), returned: back.toNumber() });
+    }
+    return { orderId, checked: !!check, lines };
+  }
+
+  /** จำนวนชิ้นต่อ 1 หน่วยของรหัส (บาร์โค้ดขนาดบรรจุ หรือรหัส SKU = หน่วยนับสต็อก) */
+  private async piecesPerUnit(db: Tx | PrismaService, sku: string, code: string): Promise<Prisma.Decimal | null> {
+    if (!sku) return null;
+    if (code === sku) return (await db.product.findUnique({ where: { sku } }))?.unitQty ?? null;
+    const pack = await db.productPack.findUnique({ where: { code } });
+    return pack && pack.sku === sku && pack.unitQty.greaterThan(0) ? pack.unitQty : null;
   }
 
   async create(user: SessionUser, input: ReturnInput): Promise<ProductReturn> {
@@ -106,9 +127,13 @@ export class ReturnsService {
           if (!ol) throw new BadRequestException('มีสินค้าที่ไม่อยู่ในออเดอร์นี้ ลบรายการนั้น หรือทำใบคืนแบบไม่อ้างออเดอร์');
           const s = summary.lines.find((x) => x.orderLineNo === ol.lineNo)!;
           if (s.returned + good + damaged > s.taken + EPS) {
-            throw new BadRequestException(`${ol.name} คืนเกินที่เบิกไป (เบิก ${s.taken} คืนแล้ว ${s.returned} ${ol.unit}) ลดจำนวนคืนแล้วลองอีกครั้ง`);
+            throw new BadRequestException(`${ol.name} คืนเกินที่เบิกไป (เบิก ${s.taken} คืนแล้ว ${s.returned} ${s.unit}) ลดจำนวนคืนแล้วลองอีกครั้ง`);
           }
-          lines.push({ lineNo: lines.length + 1, orderLineNo: ol.lineNo, sku: ol.sku, itemCode: ol.itemCode, packCode: ol.packCode, name: ol.name, unit: ol.unit, goodQty: good, damagedQty: damaged });
+          // ยอดเป็นชิ้นเมื่อผลตรวจล่าสุดให้ขนาดอื่นแทน (หน่วยตาม summary ไม่เชื่อหน่วยจากเครื่อง)
+          lines.push({
+            lineNo: lines.length + 1, orderLineNo: ol.lineNo, sku: ol.sku, itemCode: ol.itemCode, packCode: ol.packCode, name: ol.name,
+            unit: s.unit, inPieces: s.pieces !== null, goodQty: good, damagedQty: damaged,
+          });
         }
       } else {
         for (const line of input.lines) {

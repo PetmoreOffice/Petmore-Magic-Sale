@@ -4,6 +4,7 @@ import { cn } from 'cn';
 import { CatalogItem, OrderLineInput, Paged, Product, ProductPack, ProductType } from '@petmore/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { CameraButton } from '@/components/CameraButton';
 import { Field, Message, Notice, QtyStepper } from '@/components/wms';
 import { TONES, ToneChip, toneFor, unitTone } from '@/components/magic';
 import SpotlightCard from '@/components/SpotlightCard';
@@ -115,8 +116,8 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
     } finally { setOpening(false); }
   }
 
-  async function search() {
-    const value = term.trim();
+  async function search(raw = term) {
+    const value = raw.trim();
     setMessage(null);
     // สแกนบาร์โค้ดตรงตัวเปิดสินค้าเลย ไม่เจอค่อยค้นแบบคำ
     if (value && (await open(value, true))) return;
@@ -164,7 +165,12 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
           </div>
           <fieldset disabled={busy} className="grid min-w-0 gap-4">
             <div className="grid gap-4 sm:grid-cols-[14rem_minmax(0,1fr)]">
-              <Field id="order-item-code" label="รหัสสินค้า (ถ้ามี)"><Input id="order-item-code" className={`${touchInput} font-mono`} value={itemCode} onChange={(e) => setItemCode(e.target.value)} maxLength={50} placeholder="สแกนหรือพิมพ์รหัส" autoComplete="off" /></Field>
+              <Field id="order-item-code" label="รหัสสินค้า (ถ้ามี)">
+                <div className="flex gap-2">
+                  <Input id="order-item-code" className={`${touchInput} font-mono`} value={itemCode} onChange={(e) => setItemCode(e.target.value)} maxLength={50} placeholder="สแกนหรือพิมพ์รหัส" autoComplete="off" />
+                  <CameraButton label="สแกนรหัสสินค้าด้วยกล้อง" disabled={busy} onResult={(code) => setItemCode(code.slice(0, 50))} />
+                </div>
+              </Field>
               <Field id="order-item-name" label="ชื่อสินค้า *"><Input id="order-item-name" className={touchInput} value={itemName} onChange={(e) => setItemName(e.target.value)} maxLength={200} placeholder="เช่น ขนมแมวรสทูน่า 70 ก." /></Field>
             </div>
             <div className="grid gap-4 sm:grid-cols-[14rem_minmax(0,1fr)]">
@@ -242,6 +248,8 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void search(); }}>
         <Input ref={searchRef} aria-label="ค้นสินค้า" className={touchInput} value={term} onChange={(e) => setTerm(e.target.value)} maxLength={100} placeholder="ชื่อ / SKU / ยี่ห้อ หรือสแกนบาร์โค้ด" disabled={busy} />
         <Button type="submit" size="icon-touch" aria-label="ค้นสินค้า" disabled={busy || loading}>{opening || loading ? <LoaderCircleIcon className="animate-spin" /> : <SearchIcon />}</Button>
+        {/* มือถือไม่มีหัวสแกน: เปิดกล้องอ่านบาร์โค้ดแล้วเปิดสินค้านั้นเลย (ไม่เจอค้นเป็นคำ) */}
+        <CameraButton label="สแกนบาร์โค้ดสินค้าด้วยกล้อง" disabled={busy} onResult={(code) => { setTerm(code); void search(code); }} onClose={() => searchRef.current?.focus()} />
       </form>
       {filters}
       <CategoryPicker types={types} value={category} disabled={busy} onChange={(v) => { setCategory(v); setPage(1); }} />

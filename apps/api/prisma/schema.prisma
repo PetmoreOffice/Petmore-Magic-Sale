@@ -187,7 +187,7 @@ model SalesOrder {
   lines         OrderLine[]
   checks        PickCheck[]
   returns       ProductReturn[]
-  /// ผลตรวจของเบิกครั้งล่าสุด '' = ยังไม่ตรวจ, MATCH, MISMATCH (เก็บซ้ำไว้กรองรายการได้เร็ว)
+  /// ผลตรวจของเบิกครั้งล่าสุด '' = ยังไม่ตรวจ, MATCH, PARTIAL, MISMATCH (เก็บซ้ำไว้กรองรายการได้เร็ว)
   checkStatus   String         @default("")
 
   @@index([createdById, createdAt])
@@ -220,7 +220,7 @@ model PickCheck {
   orderId     String
   /// ชื่อคนที่เบิกของมาส่ง (อาจไม่มีบัญชีในระบบ)
   pickerName  String          @default("")
-  /// MATCH = ครบตรงทุกรายการ, MISMATCH = ขาด/เกิน/ผิด อย่างน้อย 1 รายการ
+  /// MATCH = ครบตรงทุกรายการ, PARTIAL = ของในคลังไม่พอ ยืนยันให้ตามที่มี (ขาดอย่างเดียว), MISMATCH = ขาด/เกิน/ผิด ต้องตามแก้
   status      String
   note        String          @default("")
   checkedById String
@@ -243,7 +243,15 @@ model PickCheckLine {
   name        String
   unit        String
   expectedQty Decimal   @db.Decimal(14, 3)
+  /// ยอดรวมในหน่วยของรายการ รวมขนาดอื่นที่ให้แทนแล้ว
   actualQty   Decimal   @db.Decimal(14, 3)
+  /// ขนาดอื่นของ SKU เดียวกันที่ให้แทน [{ packCode, unit, qty, pieces }] (สั่งเป็นลังแต่ให้เป็นโหล/ชิ้น)
+  parts        Json     @default("[]")
+  /// มีเมื่อให้ขนาดอื่นแทน: ชิ้นต่อ 1 หน่วยที่สั่ง และยอดนับได้เป็นชิ้น (เทียบกันเป็นชิ้น ไม่ใช้ทศนิยมของหน่วยที่สั่ง)
+  unitPieces   Decimal? @db.Decimal(14, 3)
+  actualPieces Decimal? @db.Decimal(14, 3)
+  /// นับเองไม่ได้สแกน และเหตุผล (ว่าง = สแกน) ให้หัวหน้าตรวจย้อน
+  manualReason String   @default("")
 
   @@unique([checkId, lineNo])
 }
@@ -282,6 +290,8 @@ model ReturnLine {
   /// ของดี (FG) และของเสียหาย (DM) ในหน่วยของบรรทัดนี้
   goodQty     Decimal       @db.Decimal(14, 3)
   damagedQty  Decimal       @db.Decimal(14, 3)
+  /// คืนเป็นชิ้น (รายการที่ตรวจของเบิกแล้วให้ขนาดอื่นแทน) ไม่งั้นเป็นหน่วยในออเดอร์
+  inPieces    Boolean       @default(false)
 
   @@unique([returnId, lineNo])
 }

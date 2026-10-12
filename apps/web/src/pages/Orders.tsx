@@ -6,6 +6,7 @@ import { cn } from 'cn';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { CameraButton } from '@/components/CameraButton';
 import { CheckBadge, Field, Message, Notice } from '@/components/wms';
 import { CustomerPicker } from '@/components/CustomerPicker';
 import { OrderBarcode } from '@/components/OrderBarcode';
@@ -287,7 +288,7 @@ export function OrdersPage() {
             <CardDescription>ค้นชื่อผู้สั่ง เบอร์โทร เลขออเดอร์ หรือเลขอ้างอิง</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
-            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); setPage(1); setHistoryQuery(historyTerm); setHistoryVersion((v) => v + 1); }}><Input aria-label="ค้นออเดอร์" className={touchInput} value={historyTerm} onChange={(e) => setHistoryTerm(e.target.value)} placeholder="ชื่อผู้สั่ง / เบอร์ / เลขออเดอร์" maxLength={100} /><Button type="submit" size="icon-touch" aria-label="ค้นออเดอร์ย้อนหลัง" disabled={loadingHistory}><SearchIcon /></Button></form>
+            <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); setPage(1); setHistoryQuery(historyTerm); setHistoryVersion((v) => v + 1); }}><Input aria-label="ค้นออเดอร์" className={touchInput} value={historyTerm} onChange={(e) => setHistoryTerm(e.target.value)} placeholder="ชื่อผู้สั่ง / เบอร์ / เลขออเดอร์" maxLength={100} /><Button type="submit" size="icon-touch" aria-label="ค้นออเดอร์ย้อนหลัง" disabled={loadingHistory}><SearchIcon /></Button><CameraButton label="สแกนบาร์โค้ดใบออเดอร์ด้วยกล้อง" disabled={loadingHistory} onResult={(code) => { setHistoryTerm(code); setPage(1); setHistoryQuery(code); setHistoryVersion((v) => v + 1); }} /></form>
             <Notice message={historyMessage} />
             {loadingHistory ? <p role="status" className="text-sm text-muted-foreground">กำลังโหลดออเดอร์…</p> : history && <>
               <p className="text-sm text-muted-foreground" role="status">{history.total} ออเดอร์ · หน้า {history.page}/{history.pages}</p>

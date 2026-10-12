@@ -1,7 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { CheckCounts, CheckFilter, Customer, MAX_ORDER_LINES, OrderInput, Paged, PickCheck, PickCheckInput, SalesOrder, SessionUser } from '@petmore/shared';
+import { CheckCounts, CheckFilter, Customer, MAX_ORDER_LINES, OrderInput, Paged, PickCheck, PickCheckInput, PickCheckPart, SalesOrder, SessionUser } from '@petmore/shared';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { audit, nextDocNo, optionalText, requireRequestId, requireText } from '../common/util';
 import { isUniqueViolation, PrismaService } from '../prisma/prisma.service';
@@ -14,6 +14,8 @@ const ORDER_INCLUDE = {
 } satisfies Prisma.SalesOrderInclude;
 type StoredOrder = Prisma.SalesOrderGetPayload<{ include: typeof ORDER_INCLUDE }>;
 type StoredCheck = Prisma.PickCheckGetPayload<{ include: { lines: true } }>;
+/** ยอดที่นับได้ของรายการในออเดอร์ pieces = นับเป็นชิ้น (มีเมื่อให้ขนาดอื่นแทน) */
+type Counted = { qty: Prisma.Decimal; parts: PickCheckPart[]; pieces: { unit: Prisma.Decimal; actual: Prisma.Decimal } | null };
 
 function dateOnly(value: unknown, label: string, optional = false): string {
   if (optional && !value) return '';
@@ -67,7 +69,11 @@ export class OrdersService {
       checkedBy: check.checkedById, createdAt: check.createdAt.toISOString(),
       lines: check.lines.sort((a, b) => a.lineNo - b.lineNo).map((l) => ({
         lineNo: l.lineNo, orderLineNo: l.orderLineNo, sku: l.sku, itemCode: l.itemCode, packCode: l.packCode, name: l.name, unit: l.unit,
-        expectedQty: Number(l.expectedQty), actualQty: Number(l.actualQty),
+        expectedQty: Number(l.expectedQty), actualQty: Number(l.actualQty), parts: Array.isArray(l.parts) ? (l.parts as unknown as PickCheckPart[]) : [],
+        pieces: l.unitPieces && l.actualPieces
+          ? { expected: l.expectedQty.times(l.unitPieces).toNumber(), actual: l.actualPieces.toNumber(), perUnit: l.unitPieces.toNumber() }
+          : null,
+        manualReason: l.manualReason,
       })),
     };
   }
@@ -94,13 +100,14 @@ export class OrdersService {
     const order = await this.prisma.salesOrder.findUnique({ where: { id: orderId }, include: { lines: true } });
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้ กลับไปเลือกจากรายการออเดอร์อีกครั้ง');
     if (input.lines.length > MAX_ORDER_LINES * 3) throw new BadRequestException('รายการตรวจมากเกินที่ระบบรองรับ ลบรายการที่ซ้ำแล้วลองอีกครั้ง');
-    const actual = new Map<number, number>();
+    const actual = new Map<number, Counted & { manualReason: string }>();
     const extras: { sku: string; itemCode: string; packCode: string; name: string; unit: string; qty: number }[] = [];
     for (const line of input.lines) {
       const qty = line.actualQty === 0 ? 0 : numberValue(line.actualQty, 'จำนวนที่นับได้', 3, false);
       if (line.orderLineNo !== null && line.orderLineNo !== undefined) {
-        if (!order.lines.some((l) => l.lineNo === line.orderLineNo)) throw new BadRequestException(`ออเดอร์นี้ไม่มีรายการที่ ${line.orderLineNo} โหลดหน้าใหม่แล้วตรวจอีกครั้ง`);
-        actual.set(line.orderLineNo, qty);
+        const orderLine = order.lines.find((l) => l.lineNo === line.orderLineNo);
+        if (!orderLine) throw new BadRequestException(`ออเดอร์นี้ไม่มีรายการที่ ${line.orderLineNo} โหลดหน้าใหม่แล้วตรวจอีกครั้ง`);
+        actual.set(orderLine.lineNo, { ...(await this.countWithParts(orderLine, qty, line.parts)), manualReason: optionalText(line.manualReason, 100) });
       } else if (qty > 0) {
         extras.push({
           sku: optionalText(line.sku, 50), itemCode: optionalText(line.itemCode, 50), packCode: optionalText(line.packCode, 100),
@@ -109,13 +116,28 @@ export class OrdersService {
       }
     }
     const lines = [
-      ...order.lines.sort((a, b) => a.lineNo - b.lineNo).map((l) => ({
-        orderLineNo: l.lineNo, sku: l.sku, itemCode: l.itemCode, packCode: l.packCode, name: l.name, unit: l.unit,
-        expectedQty: l.qty, actualQty: new Prisma.Decimal(actual.get(l.lineNo) ?? 0),
+      ...order.lines.sort((a, b) => a.lineNo - b.lineNo).map((l) => {
+        const c = actual.get(l.lineNo);
+        return {
+          orderLineNo: l.lineNo, sku: l.sku, itemCode: l.itemCode, packCode: l.packCode, name: l.name, unit: l.unit,
+          expectedQty: l.qty, actualQty: c?.qty ?? new Prisma.Decimal(0),
+          parts: (c?.parts ?? []) as unknown as Prisma.InputJsonValue,
+          unitPieces: c?.pieces?.unit ?? null, actualPieces: c?.pieces?.actual ?? null,
+          manualReason: c?.manualReason ?? '',
+        };
+      }),
+      ...extras.map((x) => ({
+        orderLineNo: null, sku: x.sku, itemCode: x.itemCode, packCode: x.packCode, name: x.name, unit: x.unit,
+        expectedQty: new Prisma.Decimal(0), actualQty: new Prisma.Decimal(x.qty), parts: [] as Prisma.InputJsonValue, unitPieces: null, actualPieces: null, manualReason: '',
       })),
-      ...extras.map((x) => ({ orderLineNo: null, sku: x.sku, itemCode: x.itemCode, packCode: x.packCode, name: x.name, unit: x.unit, expectedQty: new Prisma.Decimal(0), actualQty: new Prisma.Decimal(x.qty) })),
     ];
-    const status = lines.every((l) => l.actualQty.equals(l.expectedQty)) ? 'MATCH' : 'MISMATCH';
+    // เทียบเป็นชิ้นถ้าให้ขนาดอื่นแทน (ไม่มีปัญหาปัดทศนิยม) ไม่งั้นเทียบในหน่วยที่สั่ง
+    const diff = (l: (typeof lines)[number]) =>
+      l.unitPieces && l.actualPieces ? l.actualPieces.comparedTo(l.expectedQty.times(l.unitPieces)) : l.actualQty.comparedTo(l.expectedQty);
+    // ของในคลังไม่พอ: ยืนยันให้ตามที่มีได้เมื่อขาดอย่างเดียว (ไม่มีรายการเกิน ไม่มีของนอกออเดอร์)
+    const status = lines.every((l) => diff(l) === 0)
+      ? 'MATCH'
+      : input.shortStock === true && !extras.length && lines.every((l) => diff(l) <= 0) ? 'PARTIAL' : 'MISMATCH';
     const id = await this.prisma.$transaction(async (tx) => {
       const checkId = await nextDocNo(tx, 'CK');
       await tx.pickCheck.create({ data: {
@@ -129,11 +151,53 @@ export class OrdersService {
     return this.checkDto((await this.prisma.pickCheck.findUnique({ where: { id }, include: { lines: true } }))!);
   }
 
+  /**
+   * ยอดรวมของรายการ: นับตรงขนาด + ขนาดอื่นของ SKU เดียวกันที่ให้แทน (เช่น สั่ง 1 ลัง = 48 ชิ้น ให้โหล 3 = 36 ชิ้น)
+   * มีขนาดอื่นเมื่อไร เทียบกันเป็น "ชิ้น" (UTQ_QTY จากทะเบียนในเซิร์ฟเวอร์ ไม่เชื่อตัวเลขจากเครื่อง) ไม่ใช้ทศนิยมของหน่วยที่สั่ง
+   * qty ในหน่วยที่สั่งยังเก็บไว้ (ปัดทศนิยม 3 ตำแหน่ง) ให้หน้าคืนสินค้าใช้
+   */
+  private async countWithParts(
+    line: { sku: string; packCode: string; name: string },
+    qty: number,
+    rawParts: unknown,
+  ): Promise<Counted> {
+    const inputParts = Array.isArray(rawParts) ? rawParts.filter((p) => p && typeof p === 'object' && Number((p as { qty: unknown }).qty) > 0) : [];
+    if (!inputParts.length) return { qty: new Prisma.Decimal(qty), parts: [], pieces: null };
+    if (!line.sku) throw new BadRequestException(`${line.name} กรอกเองในออเดอร์ ให้ขนาดอื่นแทนไม่ได้ นับเป็นขนาดที่สั่งเท่านั้น`);
+    if (inputParts.length > 20) throw new BadRequestException(`${line.name} มีขนาดที่ให้แทนมากเกินไป`);
+    const product = await this.prisma.product.findUnique({ where: { sku: line.sku }, include: { packs: true } });
+    if (!product) throw new BadRequestException(`ไม่พบสินค้า ${line.sku} ในทะเบียน ให้ขนาดอื่นแทนไม่ได้`);
+    // ชิ้นต่อหน่วยของรหัส: บาร์โค้ดขนาดบรรจุ หรือรหัส SKU = หน่วยนับสต็อก
+    const piecesOf = (code: string) => {
+      if (code === product.sku) return { unit: product.unit, pieces: product.unitQty };
+      const pack = product.packs.find((p) => p.code === code);
+      return pack ? { unit: pack.unitName, pieces: pack.unitQty } : null;
+    };
+    const base = piecesOf(line.packCode);
+    if (!base || base.pieces.lessThanOrEqualTo(0)) throw new BadRequestException(`ไม่พบขนาดบรรจุของ ${line.name} ในทะเบียน ให้ขนาดอื่นแทนไม่ได้`);
+    let pieces = base.pieces.times(qty);
+    const parts = new Map<string, PickCheckPart>();
+    for (const raw of inputParts as { packCode: unknown; qty: unknown }[]) {
+      const code = optionalText(raw.packCode, 100);
+      const size = piecesOf(code);
+      if (!size || size.pieces.lessThanOrEqualTo(0)) throw new BadRequestException(`บาร์โค้ด ${code} ไม่ใช่ขนาดหนึ่งของ ${line.name}`);
+      const n = numberValue(raw.qty, `จำนวน ${size.unit} `, 3, false);
+      pieces = pieces.plus(size.pieces.times(n));
+      const has = parts.get(code);
+      parts.set(code, { packCode: code, unit: size.unit, qty: Math.round(((has?.qty ?? 0) + n) * 1000) / 1000, pieces: size.pieces.toNumber() });
+    }
+    return {
+      qty: pieces.dividedBy(base.pieces).toDecimalPlaces(3),
+      parts: [...parts.values()],
+      pieces: { unit: base.pieces, actual: pieces },
+    };
+  }
+
   /** จำนวนออเดอร์ในแต่ละแท็บของหน้าตรวจของเบิก (ตามสิทธิ์ที่เห็น) */
   async checkCounts(user: SessionUser): Promise<CheckCounts> {
     const groups = await this.prisma.salesOrder.groupBy({ by: ['checkStatus'], where: this.scope(user), _count: { _all: true } });
     const n = (s: string) => groups.find((g) => g.checkStatus === s)?._count._all ?? 0;
-    return { PENDING: n(''), MATCH: n('MATCH'), MISMATCH: n('MISMATCH'), ALL: groups.reduce((t, g) => t + g._count._all, 0) };
+    return { PENDING: n(''), MATCH: n('MATCH') + n('PARTIAL'), MISMATCH: n('MISMATCH'), ALL: groups.reduce((t, g) => t + g._count._all, 0) };
   }
 
   async list(user: SessionUser, q = '', pageValue = '1', check = ''): Promise<Paged<SalesOrder>> {
@@ -141,7 +205,7 @@ export class OrdersService {
     const term = q.trim().slice(0, 100);
     const where: Prisma.SalesOrderWhereInput = {
       ...this.scope(user),
-      ...(check === 'PENDING' ? { checkStatus: '' } : check === 'MATCH' || check === 'MISMATCH' ? { checkStatus: check } : {}),
+      ...(check === 'PENDING' ? { checkStatus: '' } : check === 'MATCH' ? { checkStatus: { in: ['MATCH', 'PARTIAL'] } } : check === 'MISMATCH' ? { checkStatus: check } : {}),
       ...(term ? { OR: ['id', 'customerCode', 'customerName', 'phone', 'reference'].map((field) => ({ [field]: { contains: term, mode: 'insensitive' } })) } : {}),
     };
     const [total, rows] = await this.prisma.$transaction([

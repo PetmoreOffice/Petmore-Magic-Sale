@@ -2,13 +2,14 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   AlertTriangleIcon, ArrowLeftIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClipboardCheckIcon, ClipboardListIcon, LoaderCircleIcon,
-  MinusIcon, PackageXIcon, PencilIcon, PlusIcon, RotateCcwIcon, SparklesIcon, StarIcon, Trash2Icon, XIcon,
+  HandIcon, MinusIcon, PackageIcon, PackageXIcon, PencilIcon, PlusIcon, RotateCcwIcon, SparklesIcon, StarIcon, Trash2Icon, XIcon,
 } from 'lucide-react';
 import { cn } from 'cn';
-import type { CheckCounts, CheckFilter, OrderLine, Paged, PickCheck, Product, SalesOrder } from '@petmore/shared';
+import type { CheckCounts, CheckFilter, OrderLine, Paged, PickCheck, Product, ProductPack, SalesOrder } from '@petmore/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { ScanFeedback, ScanInput, ScanInputHandle } from '@/components/ScanInput';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
 import { CheckBadge, Field, Message, Notice } from '@/components/wms';
@@ -16,7 +17,7 @@ import { MagicStage, TONES, type Tone } from '@/components/magic';
 import BlurText from '@/components/BlurText';
 import SpotlightCard from '@/components/SpotlightCard';
 import StarBorder from '@/components/StarBorder';
-import { defaultPack, formatQty } from '@/lib/packs';
+import { defaultPack, formatQty, packSizes } from '@/lib/packs';
 import { scrollToStart, touchInput } from '@/lib/touch';
 import { api, ApiError, formatTime, newRequestId } from '../api';
 
@@ -34,8 +35,22 @@ interface Extra {
   hint: string;
 }
 
+/** ขนาดอื่นของ SKU เดียวกันที่ให้แทนขนาดในออเดอร์ เช่น สั่ง 1 ลัง ของเหลือแค่โหล ให้เป็นโหล 3 */
+interface Sub {
+  packCode: string;
+  unit: string;
+  /** ชิ้นต่อ 1 หน่วยของขนาดนี้ และของขนาดที่สั่ง (แสดงผลอย่างเดียว เซิร์ฟเวอร์คำนวณใหม่จากทะเบียน) */
+  pieces: number;
+  base: number;
+  qty: string;
+}
+
 interface Draft {
   counts: Record<number, string>;
+  /** ขนาดที่ให้แทน แยกตามเลขรายการในออเดอร์ */
+  subs: Record<number, Sub[]>;
+  /** รายการที่นับเอง (ไม่ได้สแกน) และเหตุผล ปกติต้องสแกนเท่านั้น */
+  manual: Record<number, string>;
   extras: Extra[];
   pickerName: string;
   note: string;
@@ -43,13 +58,40 @@ interface Draft {
 }
 // เก็บความคืบหน้าการตรวจแต่ละออเดอร์ไว้ ออกไปหน้าอื่นแล้วกลับมานับต่อได้ (ไม่เขียนลงเครื่อง)
 const drafts = new Map<string, Draft>();
-const emptyDraft = (): Draft => ({ counts: {}, extras: [], pickerName: '', note: '', requestId: newRequestId() });
+const emptyDraft = (): Draft => ({ counts: {}, subs: {}, manual: {}, extras: [], pickerName: '', note: '', requestId: newRequestId() });
 
 const num = (v: string | undefined) => {
   const n = Number(v ?? '');
   return v && v.trim() !== '' && Number.isFinite(n) && n >= 0 ? n : 0;
 };
 const round3 = (n: number) => Math.round(n * 1000) / 1000;
+/**
+ * ยอดของรายการ: ไม่มีขนาดอื่น = นับในหน่วยที่สั่ง
+ * ให้ขนาดอื่นแทนเมื่อไร นับเป็นชิ้นทั้งหมด เช่น สั่ง 1 ลัง = 48 ชิ้น ให้ 3 โหล = 36 ชิ้น ขาด 12 ชิ้น (ไม่ใช้ 0.75 ลัง)
+ */
+interface Tally { actual: number; expected: number; unit: string; pieces: boolean }
+function tally(d: Draft, line: OrderLine): Tally {
+  const own = num(d.counts[line.lineNo]);
+  const subs = (d.subs[line.lineNo] ?? []).filter((x) => num(x.qty) > 0);
+  if (!subs.length) return { actual: own, expected: line.qty, unit: line.unit, pieces: false };
+  const base = subs[0].base;
+  return {
+    actual: round3(own * base + subs.reduce((t, x) => t + num(x.qty) * x.pieces, 0)),
+    expected: round3(line.qty * base),
+    unit: 'ชิ้น',
+    pieces: true,
+  };
+}
+/** จำนวนชิ้น (UTQ_QTY) ต่อ 1 หน่วยของรหัส: บาร์โค้ดขนาดบรรจุ หรือรหัส SKU = หน่วยนับสต็อก */
+function piecesOf(p: Product, code: string): number | null {
+  const pack = p.packs?.find((x) => x.code === code);
+  if (pack) return pack.unitQty;
+  if (code !== p.sku) return null;
+  const any = p.packs?.find((x) => x.factor > 0);
+  return any ? any.unitQty / any.factor : 1;
+}
+/** เหตุผลที่นับเองได้ (ไม่สแกน) บันทึกไว้ในผลตรวจให้หัวหน้าตรวจย้อน */
+const MANUAL_REASONS = ['บาร์โค้ดเสีย/อ่านไม่ออก', 'ไม่มีบาร์โค้ดบนสินค้า', 'ของจำนวนมาก นับรวมทีเดียว', 'สแกนเนอร์/กล้องใช้ไม่ได้'];
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 type LineState = 'PENDING' | 'MATCH' | 'SHORT' | 'OVER';
@@ -71,7 +113,7 @@ const toneClass = (tone: Tone | 'muted') => (tone === 'muted' ? 'bg-muted text-m
 const TABS: { key: CheckFilter; label: string; tone: Tone; empty: string }[] = [
   { key: 'PENDING', label: 'รอตรวจ', tone: 'star', empty: 'ไม่มีออเดอร์รอตรวจ ทุกออเดอร์ตรวจแล้ว' },
   { key: 'MISMATCH', label: 'ไม่ครบ', tone: 'rose', empty: 'ไม่มีออเดอร์ที่ตรวจแล้วไม่ครบ' },
-  { key: 'MATCH', label: 'ครบแล้ว', tone: 'mint', empty: 'ยังไม่มีออเดอร์ที่ตรวจครบ' },
+  { key: 'MATCH', label: 'ผ่านแล้ว', tone: 'mint', empty: 'ยังไม่มีออเดอร์ที่ตรวจผ่าน' },
   { key: 'ALL', label: 'ทั้งหมด', tone: 'plum', empty: 'ยังไม่มีออเดอร์ จดออเดอร์ที่หน้าออเดอร์สินค้าก่อน' },
 ];
 
@@ -119,7 +161,8 @@ export function CheckPage() {
 
   function openOrder(o: SalesOrder) {
     setOrder(o);
-    setDraft(drafts.get(o.id) ?? emptyDraft());
+    const kept = drafts.get(o.id);
+    setDraft(kept ? { ...emptyDraft(), ...kept } : emptyDraft());
     setResult(null);
     setMessage(null);
     setConfirming(false);
@@ -152,16 +195,38 @@ export function CheckPage() {
   }
 
   function bump(line: OrderLine, by = 1): ScanFeedback {
-    const next = round3(num(draftRef.current.counts[line.lineNo]) + by);
-    draftRef.current = { ...draftRef.current, counts: { ...draftRef.current.counts, [line.lineNo]: String(next) } };
+    const count = round3(num(draftRef.current.counts[line.lineNo]) + by);
+    draftRef.current = { ...draftRef.current, counts: { ...draftRef.current.counts, [line.lineNo]: String(count) } };
     setDraft(draftRef.current);
     setConfirming(false);
     setLastLine(`L${line.lineNo}`);
-    if (next > line.qty) {
+    return feedback(line);
+  }
+
+  function feedback(line: OrderLine, prefix = ''): ScanFeedback {
+    const t = tally(draftRef.current, line);
+    const text = `${prefix}${line.name} ${formatQty(t.actual)}/${formatQty(t.expected)} ${t.unit}`;
+    if (t.actual > t.expected) {
       navigator.vibrate?.([60, 60, 60]);
-      return { ok: false, text: `เกิน! ${line.name} ${formatQty(next)}/${formatQty(line.qty)} ${line.unit}` };
+      return { ok: false, text: `เกิน! ${text}` };
     }
-    return { ok: true, text: `${line.name} ${formatQty(next)}/${formatQty(line.qty)} ${line.unit}${next === line.qty ? ' ครบแล้ว' : ''}` };
+    return { ok: true, text: `${text}${t.actual === t.expected ? ' ครบแล้ว' : ''}` };
+  }
+
+  /** เพิ่มขนาดที่ให้แทนเข้ารายการ คืน false ถ้าแปลงหน่วยไม่ได้ (ไม่รู้จำนวนชิ้นของขนาดใดขนาดหนึ่ง) */
+  function addSub(line: OrderLine, p: Product, pack: ProductPack, by: number): boolean {
+    const base = piecesOf(p, line.packCode);
+    if (!base || pack.unitQty <= 0) return false;
+    const list = draftRef.current.subs[line.lineNo] ?? [];
+    const has = list.find((x) => x.packCode === pack.code);
+    const next = has
+      ? list.map((x) => (x === has ? { ...x, qty: String(round3(num(x.qty) + by)) } : x))
+      : [...list, { packCode: pack.code, unit: pack.unitName, pieces: pack.unitQty, base, qty: String(by) }];
+    draftRef.current = { ...draftRef.current, subs: { ...draftRef.current.subs, [line.lineNo]: next } };
+    setDraft(draftRef.current);
+    setConfirming(false);
+    setLastLine(`L${line.lineNo}`);
+    return true;
   }
 
   async function handleScan(code: string): Promise<ScanFeedback> {
@@ -194,6 +259,10 @@ export function CheckPage() {
     if (match) return bump(match);
 
     const pack = scanned ?? defaultPack(p, null);
+    // ขนาดอื่นของ SKU ที่อยู่ในออเดอร์ = ให้แทน (ของขนาดที่สั่งไม่พอ) นับรวมเข้ารายการที่ยังไม่ครบก่อน
+    const target = sameSku.find((l) => { const t = tally(draftRef.current, l); return t.actual < t.expected; }) ?? sameSku[0];
+    if (target && addSub(target, p, pack, 1)) return feedback(target, `ให้ ${pack.unitName} แทน · `);
+
     const reason: Extra['reason'] = sameSku.length ? 'WRONG_SIZE' : 'NOT_IN_ORDER';
     const hint = reason === 'WRONG_SIZE' ? `ออเดอร์สั่งเป็น ${sameSku.map((l) => l.unit).join(', ')}` : '';
     const key = `${p.sku}|${size(pack)}`;
@@ -214,8 +283,8 @@ export function CheckPage() {
   const view = useMemo(() => {
     if (!order) return null;
     const rows = order.lines.map((l) => {
-      const actual = num(draft.counts[l.lineNo]);
-      return { line: l, actual, state: lineState(actual, l.qty) };
+      const t = tally(draft, l);
+      return { line: l, tally: t, state: lineState(t.actual, t.expected) };
     });
     const extras = draft.extras.filter((x) => num(x.qty) > 0);
     return {
@@ -232,7 +301,7 @@ export function CheckPage() {
     };
   }, [order, draft]);
 
-  async function save() {
+  async function save(shortStock = false) {
     if (!order) return;
     setConfirming(false);
     setSaving(true);
@@ -244,8 +313,14 @@ export function CheckPage() {
           requestId: draft.requestId,
           pickerName: draft.pickerName,
           note: draft.note,
+          shortStock,
           lines: [
-            ...order.lines.map((l) => ({ orderLineNo: l.lineNo, actualQty: num(draft.counts[l.lineNo]) })),
+            ...order.lines.map((l) => ({
+              orderLineNo: l.lineNo,
+              actualQty: num(draft.counts[l.lineNo]),
+              manualReason: draft.manual[l.lineNo] ?? '',
+              parts: (draft.subs[l.lineNo] ?? []).filter((x) => num(x.qty) > 0).map((x) => ({ packCode: x.packCode, qty: num(x.qty) })),
+            })),
             ...draft.extras.filter((x) => num(x.qty) > 0).map((x) => ({ orderLineNo: null, sku: x.sku, packCode: x.packCode, itemCode: x.itemCode, name: x.name, unit: x.unit, actualQty: num(x.qty) })),
           ],
         },
@@ -276,7 +351,7 @@ export function CheckPage() {
         <CheckResult check={result} order={order} />
         <div className="flex flex-wrap gap-2">
           <Button size="touch" onClick={closeOrder}><ClipboardCheckIcon />ตรวจออเดอร์อื่น</Button>
-          {result.status === 'MISMATCH' && <Button size="touch" variant="outline" onClick={recheck}><RotateCcwIcon />ตรวจออเดอร์นี้ใหม่</Button>}
+          {result.status !== 'MATCH' && <Button size="touch" variant="outline" onClick={recheck}><RotateCcwIcon />ตรวจออเดอร์นี้ใหม่</Button>}
         </div>
       </div>
     );
@@ -329,7 +404,7 @@ export function CheckPage() {
               )}
               <ul className={cn('grid gap-2 sm:grid-cols-2', loadingList && 'opacity-60')} aria-busy={loadingList}>
                 {list.rows.map((o) => {
-                  const tone: Tone = !o.lastCheck ? 'star' : o.lastCheck.status === 'MATCH' ? 'mint' : 'rose';
+                  const tone: Tone = !o.lastCheck ? 'star' : o.lastCheck.status === 'MATCH' ? 'mint' : o.lastCheck.status === 'PARTIAL' ? 'kibble' : 'rose';
                   return (
                     <li key={o.id}>
                       <SpotlightCard className="h-full transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-star/60 motion-reduce:hover:translate-y-0">
@@ -363,6 +438,24 @@ export function CheckPage() {
   // ---------- กำลังตรวจ ----------
   const v = view!;
   const setCount = (lineNo: number, value: string) => { setConfirming(false); setDraft((d) => ({ ...d, counts: { ...d.counts, [lineNo]: value } })); };
+  const setSub = (lineNo: number, packCode: string, value: string) => {
+    setConfirming(false);
+    setDraft((d) => ({ ...d, subs: { ...d.subs, [lineNo]: (d.subs[lineNo] ?? []).map((x) => (x.packCode === packCode ? { ...x, qty: value } : x)) } }));
+  };
+  const removeSub = (lineNo: number, packCode: string) => {
+    setConfirming(false);
+    setDraft((d) => ({ ...d, subs: { ...d.subs, [lineNo]: (d.subs[lineNo] ?? []).filter((x) => x.packCode !== packCode) } }));
+  };
+  // เลิกนับเอง = ล้างยอดของรายการนั้นแล้วสแกนใหม่ (ไม่ให้เอาเหตุผลออกแต่ยอดที่กดเองยังอยู่)
+  const setManual = (lineNo: number, reason: string | null) => {
+    setConfirming(false);
+    setDraft((d) => {
+      const manual = { ...d.manual };
+      if (reason) return { ...d, manual: { ...manual, [lineNo]: reason } };
+      delete manual[lineNo];
+      return { ...d, manual, counts: { ...d.counts, [lineNo]: '' }, subs: { ...d.subs, [lineNo]: [] } };
+    });
+  };
   const setExtra = (key: string, value: string) => { setConfirming(false); setDraft((d) => ({ ...d, extras: d.extras.map((x) => (x.key === key ? { ...x, qty: value } : x)) })); };
   const lineRow = (r: (typeof v.rows)[number], compact = false) => (
     <CheckRow
@@ -373,21 +466,40 @@ export function CheckPage() {
       name={r.line.name}
       code={r.line.packCode || r.line.sku || r.line.itemCode || ''}
       unit={r.line.unit}
-      expected={r.line.qty}
+      expected={r.tally.expected}
+      total={r.tally.actual}
+      totalUnit={r.tally.pieces ? r.tally.unit : undefined}
+      hint={r.tally.pieces ? `สั่ง ${formatQty(r.line.qty)} ${r.line.unit} = ${formatQty(r.tally.expected)} ชิ้น` : undefined}
       value={draft.counts[r.line.lineNo] ?? ''}
       onChange={(value) => setCount(r.line.lineNo, value)}
+      manualReason={draft.manual[r.line.lineNo]}
+      onManual={(reason) => setManual(r.line.lineNo, reason)}
       disabled={saving}
-    />
+    >
+      {r.line.sku && (
+        <SubSizes
+          line={r.line}
+          subs={draft.subs[r.line.lineNo] ?? []}
+          onChange={(code, value) => setSub(r.line.lineNo, code, value)}
+          onRemove={(code) => removeSub(r.line.lineNo, code)}
+          onAdd={(p, pack) => { addSub(r.line, p, pack, 1); }}
+          manual={!!draft.manual[r.line.lineNo]}
+          disabled={saving}
+        />
+      )}
+    </CheckRow>
   );
   const saveArea = (
     <SaveArea
       allMatch={v.allMatch}
+      shortOnly={!v.over && !v.wrong && v.short > 0}
       started={v.started}
       saving={saving}
       confirming={confirming}
       problems={[v.short && `ยังไม่ครบ ${v.short} รายการ`, v.over && `เกิน ${v.over} รายการ`, v.wrong && `ไม่ตรงออเดอร์ ${v.wrong} รายการ`].filter(Boolean) as string[]}
       onSave={() => (v.allMatch ? void save() : setConfirming(true))}
       onConfirm={() => void save()}
+      onShortStock={() => void save(true)}
       onCancel={() => { setConfirming(false); scanRef.current?.focus(); }}
     />
   );
@@ -517,9 +629,23 @@ function Constellation({ order, rows, extras, match, total, onClose, disabled }:
 }
 
 /** ปุ่มบันทึกผลตรวจ: ครบ = ปุ่มทองมีดาววิ่งรอบ, ยังไม่ครบ = ยืนยันในที่เดิม (ไม่เปิดหน้าต่างซ้อน) */
-function SaveArea({ allMatch, started, saving, confirming, problems, onSave, onConfirm, onCancel }: {
-  allMatch: boolean; started: boolean; saving: boolean; confirming: boolean; problems: string[]; onSave: () => void; onConfirm: () => void; onCancel: () => void;
+function SaveArea({ allMatch, shortOnly, started, saving, confirming, problems, onSave, onConfirm, onShortStock, onCancel }: {
+  allMatch: boolean; shortOnly: boolean; started: boolean; saving: boolean; confirming: boolean; problems: string[];
+  onSave: () => void; onConfirm: () => void; onShortStock: () => void; onCancel: () => void;
 }) {
+  // ขาดอย่างเดียว: ของในคลังไม่พอ ยืนยันให้ตามที่มีได้เลย (นับเป็นตรวจผ่าน) หรือบันทึกเป็นไม่ครบให้คนเบิกไปหยิบเพิ่ม
+  if (confirming && shortOnly) {
+    return (
+      <div role="alert" className="grid gap-2 rounded-xl border border-kibble/55 bg-kibble-soft p-3 text-kibble-ink">
+        <p className="flex items-start gap-2 text-sm font-semibold"><AlertTriangleIcon className="mt-0.5 size-4 shrink-0" aria-hidden />{problems.join(' · ')} ของในคลังไม่พอใช่ไหม</p>
+        <Button size="touch" className="bg-kibble text-white hover:bg-kibble/90" onClick={onShortStock}><PackageIcon />ของไม่พอ ยืนยันให้ตามที่มี</Button>
+        <div className="grid grid-cols-2 gap-2">
+          <Button size="touch" variant="outline" onClick={onCancel}>ตรวจต่อ</Button>
+          <Button size="touch" variant="outline" className="border-rose/50 text-rose hover:bg-rose-soft hover:text-rose" onClick={onConfirm}>บันทึกเป็นไม่ครบ</Button>
+        </div>
+      </div>
+    );
+  }
   if (confirming) {
     return (
       <div role="alert" className="grid gap-2 rounded-xl border border-rose/50 bg-rose-soft p-3 text-rose">
@@ -539,16 +665,30 @@ function SaveArea({ allMatch, started, saving, confirming, problems, onSave, onC
   return allMatch && !saving ? <StarBorder innerClassName="border-0">{button}</StarBorder> : button;
 }
 
-/** แถวตรวจ 1 รายการ: สถานะซ้าย ยอดนับได้/ควรได้ตัวใหญ่ขวา ปุ่ม −/+ 48px พิมพ์จำนวนเองได้ แถวที่ครบแล้วย่อเหลือบรรทัดเดียว */
-function CheckRow({ id, name, code, unit, expected, value, onChange, onRemove, extra, hint, highlight, compact, disabled }: {
+/**
+ * แถวตรวจ 1 รายการ: สถานะซ้าย ยอดนับได้/ควรได้ตัวใหญ่ขวา แถวที่ครบแล้วย่อเหลือบรรทัดเดียว
+ * ต้องสแกนเป็นหลัก: ปกติกดได้แค่ − (แก้สแกนเกิน) จะกด + หรือพิมพ์จำนวนต้องกด "นับเอง" แล้วเลือกเหตุผลก่อน
+ */
+function CheckRow({ id, name, code, unit, expected, total, totalUnit, value, onChange, manualReason, onManual, onRemove, extra, hint, highlight, compact, disabled, children }: {
   id: string; name: string; code: string; unit: string; expected: number; value: string; onChange: (v: string) => void;
-  onRemove?: () => void; extra?: string; hint?: string; highlight?: boolean; compact?: boolean; disabled?: boolean;
+  /** ยอดรวมรวมขนาดที่ให้แทน (ไม่ส่ง = ใช้ค่าในช่อง) */
+  total?: number;
+  /** หน่วยของยอดรวม เมื่อไม่ใช่หน่วยในช่อง (ให้ขนาดอื่นแทน = ชิ้น) */
+  totalUnit?: string;
+  /** เหตุผลที่นับเอง (ว่าง = ต้องสแกน) */
+  manualReason?: string;
+  /** เปิด/เลิกนับเอง ไม่ส่ง = นับเองไม่ได้ (ของนอกออเดอร์) */
+  onManual?: (reason: string | null) => void;
+  onRemove?: () => void; extra?: string; hint?: string; highlight?: boolean; compact?: boolean; disabled?: boolean; children?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
-  const actual = num(value);
+  const [asking, setAsking] = useState(false);
+  const typed = !!manualReason;
+  const own = num(value);
+  const actual = total ?? own;
   const state: LineState = extra ? 'OVER' : lineState(actual, expected);
   const s = STATE[state];
-  const step = (by: number) => onChange(String(Math.max(0, round3(actual + by))));
+  const step = (by: number) => onChange(String(Math.max(0, round3(own + by))));
   const showControls = !compact || editing;
   return (
     <li id={id} className={cn('grid scroll-mt-28 gap-3 rounded-xl border-2 bg-card p-3 transition-shadow duration-300', s.border, highlight && 'shadow-[0_0_0_4px_color-mix(in_oklab,var(--pm-star)_35%,transparent)]', compact && !editing && 'py-2')}>
@@ -559,32 +699,67 @@ function CheckRow({ id, name, code, unit, expected, value, onChange, onRemove, e
         <div className="min-w-0 flex-1">
           <p className={cn('font-medium break-words', compact && !editing && 'line-clamp-1 text-sm')}>{name}</p>
           {(!compact || editing) && <p className="text-sm text-muted-foreground"><span className="font-mono">{code}</span> · {unit}</p>}
-          {hint && <p className="text-sm text-rose">{hint}</p>}
+          {hint && <p className={cn('text-sm', extra ? 'text-rose' : 'text-muted-foreground')}>{hint}</p>}
         </div>
         <div className="shrink-0 text-right">
           <p className={cn('font-heading font-semibold tabular-nums', compact && !editing ? 'text-base' : 'text-2xl')}>
             <span className={state === 'MATCH' ? 'text-mint' : state === 'OVER' ? 'text-rose' : ''}>{formatQty(actual)}</span>
             {!extra && <span className="text-muted-foreground">/{formatQty(expected)}</span>}
+            {totalUnit && <span className="ml-1 text-sm font-normal text-muted-foreground">{totalUnit}</span>}
           </p>
-          {(!compact || editing) && <span className={cn('inline-flex h-6 items-center rounded-full px-2 text-xs font-semibold', toneClass(s.tone))}>{extra ?? s.label(Math.abs(actual - expected))}</span>}
+          {(!compact || editing) && <span className={cn('inline-flex h-6 items-center rounded-full px-2 text-xs font-semibold', toneClass(s.tone))}>{extra ?? `${s.label(Math.abs(actual - expected))}${totalUnit && state !== 'MATCH' && state !== 'PENDING' ? ` ${totalUnit}` : ''}`}</span>}
         </div>
         {compact && <Button type="button" variant="ghost" size="icon-touch" className="-mr-1 text-muted-foreground" aria-label={editing ? `ปิดการแก้จำนวน ${name}` : `แก้จำนวน ${name}`} aria-expanded={editing} onClick={() => setEditing(!editing)}>{editing ? <ChevronDownIcon className="rotate-180" /> : <PencilIcon />}</Button>}
       </div>
       {showControls && (
         <div className="flex items-center gap-2">
-          <div className="flex items-stretch" role="group" aria-label={`จำนวนที่นับได้ ${name}`}>
-            <Button type="button" variant="outline" size="icon-touch" className="rounded-r-none" aria-label={`ลด ${name}`} disabled={disabled || actual <= 0} onClick={() => step(-1)}><MinusIcon /></Button>
-            <Input
-              className="h-12 w-20 rounded-none border-x-0 text-center text-lg font-semibold tabular-nums md:text-lg"
-              type="number" inputMode="decimal" min={0} step="any" aria-label={`จำนวนที่นับได้ ${name}`}
-              value={value} placeholder="0" disabled={disabled}
-              onFocus={(e) => e.target.select()} onChange={(e) => onChange(e.target.value)}
-            />
-            <Button type="button" variant="outline" size="icon-touch" className="rounded-l-none" aria-label={`เพิ่ม ${name}`} disabled={disabled} onClick={() => step(1)}><PlusIcon /></Button>
-          </div>
+          {typed ? (
+            <div className="flex items-stretch" role="group" aria-label={`จำนวนที่นับได้ ${name}`}>
+              <Button type="button" variant="outline" size="icon-touch" className="rounded-r-none" aria-label={`ลด ${name}`} disabled={disabled || own <= 0} onClick={() => step(-1)}><MinusIcon /></Button>
+              <Input
+                className="h-12 w-20 rounded-none border-x-0 text-center text-lg font-semibold tabular-nums md:text-lg"
+                type="number" inputMode="decimal" min={0} step="any" aria-label={`จำนวนที่นับได้ ${name}`}
+                value={value} placeholder="0" disabled={disabled}
+                onFocus={(e) => e.target.select()} onChange={(e) => onChange(e.target.value)}
+              />
+              <Button type="button" variant="outline" size="icon-touch" className="rounded-l-none" aria-label={`เพิ่ม ${name}`} disabled={disabled} onClick={() => step(1)}><PlusIcon /></Button>
+            </div>
+          ) : (
+            // ยังไม่นับเอง: แก้ได้แค่ลดลง (สแกนเกิน) จำนวนเพิ่มได้จากการสแกนเท่านั้น
+            <Button type="button" variant="outline" size="icon-touch" aria-label={`ลด ${name} 1`} disabled={disabled || own <= 0} onClick={() => step(-1)}><MinusIcon /></Button>
+          )}
+          <span className="text-sm text-muted-foreground">{typed ? unit : `${formatQty(own)} ${unit} · สแกนเพื่อเพิ่ม`}</span>
           {onRemove && <Button type="button" variant="ghost" size="icon-touch" className="ml-auto text-muted-foreground hover:text-destructive" aria-label={`ลบ ${name} ออกจากผลตรวจ`} disabled={disabled} onClick={onRemove}><Trash2Icon /></Button>}
         </div>
       )}
+      {showControls && onManual && (
+        typed ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-kibble-soft px-3 py-1 text-sm text-kibble-ink">
+            <HandIcon className="size-4 shrink-0" aria-hidden />
+            <span className="min-w-0 flex-1">นับเอง: {manualReason}</span>
+            <Button type="button" variant="ghost" size="touch" className="-mr-2 px-2 text-kibble-ink hover:bg-kibble/15" disabled={disabled} onClick={() => onManual(null)}>
+              <RotateCcwIcon />ล้าง สแกนใหม่
+            </Button>
+          </div>
+        ) : asking ? (
+          <div className="grid gap-2 rounded-lg bg-muted/50 p-2">
+            <label htmlFor={`${id}-why`} className="text-sm font-medium">ทำไมต้องนับเอง (ระบบบันทึกไว้ในผลตรวจ)</label>
+            <div className="flex flex-wrap gap-2">
+              <NativeSelect id={`${id}-why`} size="touch" defaultValue="" className="min-w-0 flex-1" disabled={disabled}
+                onChange={(e) => { if (e.target.value) { onManual(e.target.value); setAsking(false); } }}>
+                <NativeSelectOption value="" disabled>เลือกเหตุผล</NativeSelectOption>
+                {MANUAL_REASONS.map((r) => <NativeSelectOption key={r} value={r}>{r}</NativeSelectOption>)}
+              </NativeSelect>
+              <Button type="button" variant="ghost" size="touch" onClick={() => setAsking(false)}>ยกเลิก</Button>
+            </div>
+          </div>
+        ) : (
+          <Button type="button" variant="ghost" size="touch" className="justify-self-start px-2 text-muted-foreground" disabled={disabled} onClick={() => setAsking(true)}>
+            <HandIcon />สแกนไม่ได้ นับเอง
+          </Button>
+        )
+      )}
+      {showControls && children}
     </li>
   );
 }
@@ -598,16 +773,18 @@ function CheckResult({ check, order }: { check: PickCheck; order: SalesOrder }) 
     const t = setTimeout(() => spark.current?.burst(), 120);
     return () => clearTimeout(t);
   }, [check.status]);
-  const diffs = check.lines.filter((l) => l.actualQty !== l.expectedQty);
-  const title = check.status === 'MATCH' ? `ของครบตาม ${order.id}` : `บันทึกผลตรวจ ${order.id}: ไม่ครบ`;
+  const diffs = check.lines.map((l) => ({ l, ...resultTally(l) })).filter((x) => x.actual !== x.expected);
+  const title = check.status === 'MATCH' ? `ของครบตาม ${order.id}` : check.status === 'PARTIAL' ? `ให้ตามที่มี ${order.id}: ของในคลังไม่พอ` : `บันทึกผลตรวจ ${order.id}: ไม่ครบ`;
+  const subbed = check.lines.filter((l) => l.parts.length > 0);
+  const manual = check.lines.filter((l) => l.manualReason);
   return (
     <div className="grid gap-4">
       <div className="relative" role="status">
         <SparkBurst ref={spark} count={24} reach={44} length={16} duration={760} />
         <MagicStage>
           <div className="grid justify-items-center gap-3 py-4 text-center">
-            <span className={cn('grid size-16 place-items-center rounded-full ring-4', check.status === 'MATCH' ? 'bg-mint-soft text-mint ring-mint/25' : 'bg-rose-soft text-rose ring-rose/25')}>
-              {check.status === 'MATCH' ? <CheckIcon className="size-8" aria-hidden /> : <AlertTriangleIcon className="size-8" aria-hidden />}
+            <span className={cn('grid size-16 place-items-center rounded-full ring-4', check.status === 'MATCH' ? 'bg-mint-soft text-mint ring-mint/25' : check.status === 'PARTIAL' ? 'bg-kibble-soft text-kibble-ink ring-kibble/25' : 'bg-rose-soft text-rose ring-rose/25')}>
+              {check.status === 'MATCH' ? <CheckIcon className="size-8" aria-hidden /> : check.status === 'PARTIAL' ? <PackageIcon className="size-8" aria-hidden /> : <AlertTriangleIcon className="size-8" aria-hidden />}
             </span>
             {reduce || check.status !== 'MATCH'
               ? <p className="font-heading text-2xl font-semibold sm:text-3xl">{title}</p>
@@ -618,19 +795,20 @@ function CheckResult({ check, order }: { check: PickCheck; order: SalesOrder }) 
       </div>
       {diffs.length > 0 && (
         <Card>
-          <CardHeader><CardTitle role="heading" aria-level={2}>รายการที่ไม่ตรง ({diffs.length})</CardTitle><CardDescription>เลขที่ผลตรวจ {check.id}</CardDescription></CardHeader>
+          <CardHeader><CardTitle role="heading" aria-level={2}>{check.status === 'PARTIAL' ? 'รายการที่ให้ไม่ครบเพราะของไม่พอ' : 'รายการที่ไม่ตรง'} ({diffs.length})</CardTitle><CardDescription>เลขที่ผลตรวจ {check.id}</CardDescription></CardHeader>
           <CardContent>
             <ul className="divide-y divide-border">
-              {diffs.map((l) => {
-                const d = l.actualQty - l.expectedQty;
+              {diffs.map(({ l, actual, expected, unit }) => {
+                const d = round3(actual - expected);
                 return (
                   <li key={l.lineNo} className="flex items-start justify-between gap-3 py-3">
                     <div className="min-w-0">
                       <p className="font-medium break-words">{l.name}</p>
-                      <p className="text-sm text-muted-foreground"><span className="font-mono">{l.packCode || l.sku || l.itemCode}</span> · นับได้ {formatQty(l.actualQty)} / ควรได้ {formatQty(l.expectedQty)} {l.unit}</p>
+                      <p className="text-sm text-muted-foreground"><span className="font-mono">{l.packCode || l.sku || l.itemCode}</span> · นับได้ {formatQty(actual)} / ควรได้ {formatQty(expected)} {unit}</p>
+                      {l.pieces && <p className="text-sm text-muted-foreground">สั่ง {formatQty(l.expectedQty)} {l.unit} · ให้ {partsText(l)}</p>}
                     </div>
                     <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold', l.orderLineNo === null || d > 0 ? 'bg-rose-soft text-rose' : 'bg-kibble-soft text-kibble-ink')}>
-                      {l.orderLineNo === null ? 'ไม่อยู่ในออเดอร์' : d > 0 ? `เกิน ${formatQty(d)}` : `ขาด ${formatQty(-d)}`}
+                      {l.orderLineNo === null ? 'ไม่อยู่ในออเดอร์' : d > 0 ? `เกิน ${formatQty(d)} ${unit}` : `ขาด ${formatQty(-d)} ${unit}`}
                     </span>
                   </li>
                 );
@@ -639,7 +817,137 @@ function CheckResult({ check, order }: { check: PickCheck; order: SalesOrder }) 
           </CardContent>
         </Card>
       )}
+      {subbed.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle role="heading" aria-level={2}>ให้ขนาดอื่นแทน ({subbed.length})</CardTitle><CardDescription>ขนาดที่สั่งไม่พอ จึงให้ขนาดอื่นของสินค้าเดียวกัน</CardDescription></CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border">
+              {subbed.map((l) => (
+                <li key={l.lineNo} className="grid gap-0.5 py-3">
+                  <p className="font-medium break-words">{l.name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    สั่ง {formatQty(l.expectedQty)} {l.unit}{l.pieces && ` (${formatQty(l.pieces.expected)} ชิ้น)`} · ให้ {partsText(l)}{l.pieces && ` รวม ${formatQty(l.pieces.actual)} ชิ้น`}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+      {manual.length > 0 && (
+        <Card>
+          <CardHeader><CardTitle role="heading" aria-level={2}>นับเอง ไม่ได้สแกน ({manual.length})</CardTitle><CardDescription>หัวหน้าตรวจย้อนรายการเหล่านี้ได้</CardDescription></CardHeader>
+          <CardContent>
+            <ul className="divide-y divide-border">
+              {manual.map((l) => (
+                <li key={l.lineNo} className="flex items-start justify-between gap-3 py-3">
+                  <p className="min-w-0 font-medium break-words">{l.name}</p>
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-kibble-soft px-2.5 py-1 text-xs font-semibold text-kibble-ink"><HandIcon className="size-3.5" aria-hidden />{l.manualReason}</span>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
       {check.note && <Notice message={{ kind: 'info', text: `หมายเหตุ: ${check.note}` }} />}
+    </div>
+  );
+}
+
+type ResultLine = PickCheck['lines'][number];
+/** ยอดในผลตรวจ: ให้ขนาดอื่นแทน = เป็นชิ้น ไม่งั้นเป็นหน่วยที่สั่ง */
+const resultTally = (l: ResultLine) =>
+  l.pieces ? { actual: l.pieces.actual, expected: l.pieces.expected, unit: 'ชิ้น' } : { actual: l.actualQty, expected: l.expectedQty, unit: l.unit };
+/** "ลัง × 0 · PACK x 12 × 3" ส่วนที่นับตรงขนาด (ชิ้นที่เหลือจากขนาดอื่น) ขึ้นก่อน */
+function partsText(l: ResultLine): string {
+  const fromParts = l.parts.reduce((t, x) => t + x.qty * x.pieces, 0);
+  const direct = l.pieces ? round3((l.pieces.actual - fromParts) / l.pieces.perUnit) : 0;
+  return [...(direct > 0 ? [`${l.unit} × ${formatQty(direct)}`] : []), ...l.parts.map((x) => `${x.unit} × ${formatQty(x.qty)}`)].join(' · ');
+}
+
+/**
+ * ขนาดอื่นที่ให้แทนขนาดในออเดอร์ (สั่งเป็นลัง ของเหลือแต่โหล/ชิ้น) สแกนบาร์โค้ดขนาดนั้นได้เลย หรือกดเลือกขนาดเองถ้าบาร์โค้ดอ่านไม่ได้
+ * แต่ละขนาดมี −/+ ของตัวเอง ยอดของรายการเปลี่ยนเป็นนับเป็นชิ้นทันที (สั่ง 1 ลัง = 48 ชิ้น ให้ 3 โหล = 36 ชิ้น)
+ */
+function SubSizes({ line, subs, onChange, onRemove, onAdd, manual, disabled }: {
+  line: OrderLine; subs: Sub[]; onChange: (packCode: string, value: string) => void; onRemove: (packCode: string) => void;
+  onAdd: (p: Product, pack: ProductPack) => void;
+  /** นับเองอยู่: กด + / พิมพ์ / แตะเลือกขนาดได้ ไม่งั้นเพิ่มได้จากการสแกนเท่านั้น */
+  manual: boolean; disabled?: boolean;
+}) {
+  const [product, setProduct] = useState<Product | null>(null);
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  async function openPicker() {
+    setOpen(true);
+    if (product) return;
+    setLoading(true);
+    setError('');
+    try { setProduct(await api<Product>('/products/lookup/' + encodeURIComponent(line.sku))); }
+    catch (e) { setError(errorText(e)); }
+    finally { setLoading(false); }
+  }
+
+  const base = product ? piecesOf(product, line.packCode) : null;
+  const choices = product && base ? packSizes(product).filter((x) => x.unitQty > 0 && x.unitQty !== base && !subs.some((s) => s.packCode === x.code)) : [];
+
+  return (
+    <div className="grid gap-2 border-t border-dashed border-border pt-2">
+      {subs.map((x) => {
+        const n = num(x.qty);
+        return (
+          <div key={x.packCode} className="flex flex-wrap items-center gap-2">
+            <span className="min-w-0 flex-1 text-sm">
+              ให้ <strong className="font-semibold">{x.unit}</strong> แทน
+              <span className="block text-muted-foreground tabular-nums">= {formatQty(round3(n * x.pieces))} ชิ้น</span>
+            </span>
+            {!manual ? (
+              <>
+                <span className="text-lg font-semibold tabular-nums">{formatQty(n)}</span>
+                <Button type="button" variant="outline" size="icon-touch" aria-label={`ลด ${x.unit} 1`} disabled={disabled || n <= 0} onClick={() => onChange(x.packCode, String(Math.max(0, round3(n - 1))))}><MinusIcon /></Button>
+              </>
+            ) : (
+            <div className="flex items-stretch" role="group" aria-label={`จำนวน ${x.unit} ที่ให้แทน`}>
+              <Button type="button" variant="outline" size="icon-touch" className="rounded-r-none" aria-label={`ลด ${x.unit}`} disabled={disabled || n <= 0} onClick={() => onChange(x.packCode, String(Math.max(0, round3(n - 1))))}><MinusIcon /></Button>
+              <Input
+                className="h-12 w-16 rounded-none border-x-0 text-center text-lg font-semibold tabular-nums md:text-lg"
+                type="number" inputMode="decimal" min={0} step="any" aria-label={`จำนวน ${x.unit} ที่ให้แทน`}
+                value={x.qty} placeholder="0" disabled={disabled}
+                onFocus={(e) => e.target.select()} onChange={(e) => onChange(x.packCode, e.target.value)}
+              />
+              <Button type="button" variant="outline" size="icon-touch" className="rounded-l-none" aria-label={`เพิ่ม ${x.unit}`} disabled={disabled} onClick={() => onChange(x.packCode, String(round3(n + 1)))}><PlusIcon /></Button>
+            </div>
+            )}
+            <Button type="button" variant="ghost" size="icon-touch" className="text-muted-foreground hover:text-destructive" aria-label={`เลิกให้ ${x.unit} แทน`} disabled={disabled} onClick={() => onRemove(x.packCode)}><Trash2Icon /></Button>
+          </div>
+        );
+      })}
+      {!manual ? (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground"><PackageIcon className="size-4 shrink-0" aria-hidden />ขนาดที่สั่งไม่พอ สแกนบาร์โค้ดขนาดอื่นของสินค้านี้ได้เลย ระบบนับเป็นชิ้นให้</p>
+      ) : !open ? (
+        <Button type="button" variant="ghost" size="touch" className="justify-self-start px-2 text-muted-foreground" disabled={disabled} onClick={() => void openPicker()}>
+          <PackageIcon />ขนาดนี้ไม่พอ ให้ขนาดอื่นแทน
+        </Button>
+      ) : (
+        <div className="grid gap-2 rounded-lg bg-muted/50 p-2">
+          <p className="text-sm text-muted-foreground">สแกนบาร์โค้ดขนาดที่ให้แทนได้เลย หรือแตะเลือกขนาด</p>
+          {loading && <p className="flex items-center gap-2 text-sm"><LoaderCircleIcon className="size-4 animate-spin" aria-hidden />กำลังโหลดขนาดบรรจุ…</p>}
+          {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+          {product && !base && <p className="text-sm text-muted-foreground">ไม่รู้จำนวนชิ้นของขนาดที่สั่ง ให้ขนาดอื่นแทนไม่ได้</p>}
+          {product && base && !choices.length && <p className="text-sm text-muted-foreground">สินค้านี้ไม่มีขนาดอื่นให้เลือกแล้ว</p>}
+          <div className="flex flex-wrap gap-2">
+            {base && choices.map((x) => (
+              <Button key={x.code} type="button" variant="outline" size="touch" disabled={disabled} onClick={() => { if (product) onAdd(product, x); setOpen(false); }}>
+                <PlusIcon />{x.unitName}
+                <span className="text-muted-foreground tabular-nums">= {formatQty(x.unitQty)} ชิ้น</span>
+              </Button>
+            ))}
+            <Button type="button" variant="ghost" size="touch" onClick={() => setOpen(false)}>ปิด</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

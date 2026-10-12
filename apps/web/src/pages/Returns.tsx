@@ -59,10 +59,13 @@ const ORDER_REASONS: ReturnReason[] = ['OVER_PICK', 'UNSOLD', 'OTHER'];
 const FREE_REASONS: ReturnReason[] = ['EVENT_END', 'UNSOLD', 'OVER_PICK', 'OTHER'];
 const UNIT_SUGGESTIONS = ['ชิ้น', 'ซอง', 'ถุง', 'แพ็ค', 'กล่อง', 'ลัง'];
 
-function orderDraft(order: SalesOrder): Draft {
+/** หน่วยของรายการในออเดอร์ตามยอดเบิก: ตรวจแล้วให้ขนาดอื่นแทน = ชิ้น */
+const unitOf = (summary: OrderReturnSummary, l: { lineNo: number; unit: string }) => summary.lines.find((x) => x.orderLineNo === l.lineNo)?.unit ?? l.unit;
+
+function orderDraft(order: SalesOrder, summary: OrderReturnSummary): Draft {
   return {
     rows: order.lines.map((l) => ({
-      key: `L${l.lineNo}`, orderLineNo: l.lineNo, sku: l.sku, packCode: l.packCode, itemCode: l.itemCode ?? '', name: l.name, unit: l.unit, good: '', damaged: '',
+      key: `L${l.lineNo}`, orderLineNo: l.lineNo, sku: l.sku, packCode: l.packCode, itemCode: l.itemCode ?? '', name: l.name, unit: unitOf(summary, l), good: '', damaged: '',
     })),
     reason: 'UNSOLD', returnerName: '', note: '', requestId: newRequestId(),
   };
@@ -126,7 +129,11 @@ export function ReturnsPage() {
       setSummary(s);
       setOrder(o);
       // ตั้ง ref ทันที สแกนของต่อได้เลยโดยไม่ต้องรอ render
-      draftRef.current = drafts.get(`order:${o.id}`) ?? orderDraft(o);
+      // หน่วยอาจเปลี่ยนถ้าตรวจของเบิกใหม่ (หน่วยที่สั่ง ↔ ชิ้น) ใช้หน่วยจากยอดเบิกล่าสุดเสมอ
+      const kept = drafts.get(`order:${o.id}`);
+      draftRef.current = kept
+        ? { ...kept, rows: kept.rows.map((r) => (r.orderLineNo === null ? r : { ...r, unit: unitOf(s, { lineNo: r.orderLineNo, unit: r.unit }) })) }
+        : orderDraft(o, s);
       setDraft(draftRef.current);
       setMode('order');
     } catch (e) {
@@ -156,16 +163,16 @@ export function ReturnsPage() {
     return s ? round3(s.taken - s.returned) : 0;
   };
 
-  function bump(key: string): ScanFeedback {
+  function bump(key: string, by = 1): ScanFeedback {
     const d = draftRef.current;
     const row = d.rows.find((r) => r.key === key)!;
     const now = num(row.good) + num(row.damaged);
-    if (now + 1 > remainingOf(row) + 0.0005) {
+    if (now + by > remainingOf(row) + 0.0005) {
       navigator.vibrate?.([60, 60, 60]);
       return { ok: false, text: `คืนเกินที่เบิกไป! ${row.name} คืนได้อีก ${formatQty(Math.max(0, remainingOf(row) - now))} ${row.unit}` };
     }
     const field = condition;
-    draftRef.current = { ...d, rows: d.rows.map((r) => (r.key === key ? { ...r, [field]: String(round3(num(r[field]) + 1)) } : r)) };
+    draftRef.current = { ...d, rows: d.rows.map((r) => (r.key === key ? { ...r, [field]: String(round3(num(r[field]) + by)) } : r)) };
     setDraft(draftRef.current);
     setLastRow(key);
     const updated = draftRef.current.rows.find((r) => r.key === key)!;
@@ -211,6 +218,13 @@ export function ReturnsPage() {
         const product = await lookup(value);
         if (!product) { setMessage({ kind: 'error', text: `ไม่พบสินค้ารหัส ${value} ลองสแกนอีกครั้ง หรือใช้บาร์โค้ดอื่นบนสินค้า` }); return { ok: false }; }
         const scanned = product.packs?.find((x) => x.code === value) ?? null;
+        // รายการที่นับเป็นชิ้น: สแกนขนาดไหนของ SKU นี้ก็ได้ บวกตามจำนวนชิ้นของขนาดนั้น (โหล = +12)
+        const inPieces = draftRef.current.rows.find((r) => r.sku === product.sku && r.orderLineNo !== null && summary?.lines.find((x) => x.orderLineNo === r.orderLineNo)?.pieces);
+        if (inPieces) {
+          const any = product.packs?.find((x) => x.factor > 0);
+          const pieces = scanned ? scanned.unitQty : any ? any.unitQty / any.factor : 1;
+          return bump(inPieces.key, round3(pieces));
+        }
         const match = draftRef.current.rows.find((r) => {
           if (r.sku !== product.sku) return false;
           const linePack = product.packs?.find((x) => x.code === r.packCode);

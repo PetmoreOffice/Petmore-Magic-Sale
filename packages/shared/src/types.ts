@@ -379,10 +379,20 @@ export interface OrderLine extends OrderLineInput {
   amount: number;
 }
 
-export type PickCheckStatus = 'MATCH' | 'MISMATCH';
-/** แท็บในหน้าตรวจของเบิก: PENDING = ยังไม่ตรวจ */
-export type CheckFilter = 'PENDING' | PickCheckStatus | 'ALL';
+/** MATCH = ครบ, PARTIAL = ของในคลังไม่พอ ผู้ตรวจยืนยันให้ตามที่มี (ขาดอย่างเดียว ไม่มีเกิน/ผิด), MISMATCH = ไม่ครบ ต้องตามแก้ */
+export type PickCheckStatus = 'MATCH' | 'PARTIAL' | 'MISMATCH';
+/** แท็บในหน้าตรวจของเบิก: PENDING = ยังไม่ตรวจ, MATCH = ตรวจผ่าน (รวม PARTIAL) */
+export type CheckFilter = 'PENDING' | 'MATCH' | 'MISMATCH' | 'ALL';
 export type CheckCounts = Record<CheckFilter, number>;
+
+/** ขนาดอื่นของ SKU เดียวกันที่ให้แทนขนาดในออเดอร์ เช่น สั่ง 1 ลัง ให้เป็นโหล 3 + ชิ้น 6 */
+export interface PickCheckPart {
+  packCode: string;
+  unit: string;
+  qty: number;
+  /** จำนวนชิ้นต่อ 1 หน่วยของขนาดนี้ (UTQ_QTY) */
+  pieces: number;
+}
 
 export interface PickCheckLine {
   lineNo: number;
@@ -394,7 +404,14 @@ export interface PickCheckLine {
   name: string;
   unit: string;
   expectedQty: number;
+  /** ยอดรวมในหน่วยของรายการ (ขนาดที่สั่ง + ขนาดอื่นที่ให้แทน ปัดทศนิยม 3 ตำแหน่ง) ใช้กับหน้าคืนสินค้า */
   actualQty: number;
+  /** ขนาดอื่นที่นับรวมอยู่ใน actualQty (ว่าง = ให้ตรงขนาดทั้งหมด) */
+  parts: PickCheckPart[];
+  /** ยอดเป็นชิ้น มีเมื่อให้ขนาดอื่นแทน (สั่ง 1 ลัง = 48 ชิ้น ให้ 36 ชิ้น ขาด 12 ชิ้น) ใช้แสดงและเทียบแทน actualQty */
+  pieces: { expected: number; actual: number; perUnit: number } | null;
+  /** นับเอง ไม่ได้สแกน และเหตุผล (ว่าง = สแกน) */
+  manualReason: string;
 }
 
 export interface PickCheck {
@@ -408,12 +425,22 @@ export interface PickCheck {
   lines: PickCheckLine[];
 }
 
-/** ส่งผลตรวจ: รายการในออเดอร์ส่งแค่ orderLineNo + actualQty เซิร์ฟเวอร์เติมยอดที่ควรได้เอง */
+/**
+ * ส่งผลตรวจ: รายการในออเดอร์ส่ง orderLineNo + actualQty (นับเป็นขนาดที่สั่ง) + parts (ขนาดอื่นที่ให้แทน)
+ * เซิร์ฟเวอร์เติมยอดที่ควรได้และแปลงหน่วยของ parts เอง
+ */
 export interface PickCheckInput {
   requestId: string;
   pickerName: string;
   note: string;
-  lines: { orderLineNo: number | null; sku?: string; itemCode?: string; packCode?: string; name?: string; unit?: string; actualQty: number }[];
+  /** ของในคลังไม่พอ ผู้ตรวจยืนยันให้ตามที่มี ใช้ได้เมื่อมีแค่รายการขาด (ไม่มีเกิน/ของนอกออเดอร์) */
+  shortStock?: boolean;
+  lines: {
+    orderLineNo: number | null; sku?: string; itemCode?: string; packCode?: string; name?: string; unit?: string; actualQty: number;
+    parts?: { packCode: string; qty: number }[];
+    /** นับเอง (กด +/พิมพ์จำนวน) แทนการสแกน ต้องมีเหตุผล */
+    manualReason?: string;
+  }[];
 }
 
 export type ReturnReason = 'OVER_PICK' | 'UNSOLD' | 'EVENT_END' | 'OTHER';
@@ -463,7 +490,11 @@ export interface ReturnInput {
 export interface OrderReturnSummary {
   orderId: string;
   checked: boolean;
-  lines: { orderLineNo: number; taken: number; returned: number }[];
+  /**
+   * unit = หน่วยของ taken/returned: ผลตรวจล่าสุดให้ขนาดอื่นแทน = "ชิ้น" (pieces = ชิ้นต่อ 1 หน่วยที่สั่ง) ไม่งั้นเป็นหน่วยในออเดอร์ (pieces = null)
+   * คืนเป็นชิ้นได้ทุกขนาดของ SKU เดียวกัน สแกนโหลก็ +12 ชิ้น
+   */
+  lines: { orderLineNo: number; taken: number; returned: number; unit: string; pieces: number | null }[];
 }
 
 export interface SalesOrder {

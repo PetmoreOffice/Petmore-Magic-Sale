@@ -1,7 +1,7 @@
 import { ReactNode, RefObject } from 'react';
 import { AlertCircleIcon, CheckCircle2Icon, MinusIcon, PlusIcon } from 'lucide-react';
 import { cn } from 'cn';
-import type { PackSize, StockStatus } from '@petmore/shared';
+import type { PackSize, PickCheckStatus, StockStatus } from '@petmore/shared';
 import { breakdown, formatQty } from '@/lib/packs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -141,10 +141,10 @@ export function QtyStepper({ id, value, onChange, label, min = 1, max = 100_000_
   );
 }
 
-/** ป้ายผลตรวจของเบิกล่าสุดของออเดอร์: ครบ (มิ้นต์) / ไม่ครบ (แดง) / รอตรวจ */
-export function CheckBadge({ check, className }: { check: { status: 'MATCH' | 'MISMATCH' } | null | undefined; className?: string }) {
+/** ป้ายผลตรวจของเบิกล่าสุดของออเดอร์: ครบ (มิ้นต์) / ของไม่พอ ให้ตามที่มี (คาราเมล) / ไม่ครบ (แดง) / รอตรวจ */
+export function CheckBadge({ check, className }: { check: { status: PickCheckStatus } | null | undefined; className?: string }) {
   if (!check) return <Badge variant="outline" className={className}>รอตรวจ</Badge>;
-  return check.status === 'MATCH'
-    ? <Badge className={cn('bg-mint-soft text-mint', className)}><CheckCircle2Icon />ตรวจแล้ว ครบ</Badge>
-    : <Badge variant="destructive" className={className}><AlertCircleIcon />ตรวจแล้ว ไม่ครบ</Badge>;
+  if (check.status === 'MATCH') return <Badge className={cn('bg-mint-soft text-mint', className)}><CheckCircle2Icon />ตรวจแล้ว ครบ</Badge>;
+  if (check.status === 'PARTIAL') return <Badge className={cn('bg-kibble-soft text-kibble-ink', className)}><CheckCircle2Icon />ของไม่พอ ให้ตามที่มี</Badge>;
+  return <Badge variant="destructive" className={className}><AlertCircleIcon />ตรวจแล้ว ไม่ครบ</Badge>;
 }
