@@ -16,3 +16,6 @@ dev-dist/
 *.key
 *.pfx
 *.p12
+
+# รายงานตรวจงานออกแบบ (Impeccable audit) เก็บในเครื่องเท่านั้น
+audit/
