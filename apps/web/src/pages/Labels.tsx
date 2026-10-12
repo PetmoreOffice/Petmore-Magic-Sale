@@ -130,8 +130,11 @@ export function LabelsPage() {
           </CardContent>
         </Card>
 
-        {/* ชุดเดียวกันใช้ทั้งดูตัวอย่างบนจอและพิมพ์ */}
-        <div className="label-sheet grid gap-6 print:gap-0">
+        {/* ชุดเดียวกันใช้ทั้งดูตัวอย่างบนจอและพิมพ์
+            จอแคบ: ป้ายย่อตามจอจนอ่านไม่ออก จึงให้ตัวอย่างกว้างอย่างน้อย 40rem แล้วเลื่อนซ้าย-ขวาดู (กระดาษจริงไม่เปลี่ยน) */}
+        <p className="-mb-3 text-sm text-muted-foreground sm:hidden print:hidden">เลื่อนซ้าย-ขวาเพื่อดูป้ายขนาดเต็ม กระดาษที่พิมพ์ออกมาขนาดปกติ</p>
+        <div className="-mx-4 overflow-x-auto px-4 pb-2 print:mx-0 print:overflow-visible print:p-0">
+        <div className="label-sheet grid min-w-[40rem] gap-6 sm:min-w-0 print:min-w-0 print:gap-0">
           {pages.map((page, i) => (
             <section key={i} className="label-page grid gap-3" aria-label={`หน้า ${i + 1}`}>
               <p className="text-xs text-muted-foreground print:hidden">
@@ -142,6 +145,7 @@ export function LabelsPage() {
               ))}
             </section>
           ))}
+        </div>
         </div>
       </div>
     );

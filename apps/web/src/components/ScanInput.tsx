@@ -98,7 +98,6 @@ export const ScanInput = forwardRef<ScanInputHandle, Props>(function ScanInput(
       className={cn(
         'relative isolate overflow-hidden rounded-2xl bg-brand p-4 text-brand-foreground shadow-stage transition-opacity sm:px-5',
         shake,
-        disabled && 'opacity-60',
       )}
       style={{ backgroundImage: STAGE_BACKGROUND }}
       // แตะตรงไหนของเวทีก็ได้ เพื่อเอาเคอร์เซอร์กลับมาที่ช่องสแกน
@@ -111,6 +110,7 @@ export const ScanInput = forwardRef<ScanInputHandle, Props>(function ScanInput(
       {flash && (
         <span
           key={flash.key}
+          data-scan-flash
           aria-hidden="true"
           className={cn(
             'pointer-events-none absolute inset-0 -z-0 animate-[scan-flash_0.7s_ease-out_forwards]',

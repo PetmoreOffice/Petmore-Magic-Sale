@@ -104,11 +104,13 @@ export default function DevLabelsPage() {
 
       <section className="grid max-w-3xl gap-4">
         <h2 className="font-heading text-xl font-semibold">ป้าย Location (พิมพ์)</h2>
+        <div className="-mx-4 overflow-x-auto px-4 pb-2"><div className="min-w-[40rem] sm:min-w-0">
         <LocationLabel
           location={{ id: 'cmloc0000000000demo0001', warehouse: 'WH1', zoneId: 'z', code: '01-02', displayCode: 'A-01-02', name: 'ชั้นอาหารแมว', active: true, revision: 0 }}
           zoneName="โซน A"
           batch={{ id: 'batch000000demo', actor: 'ผู้ดูแลระบบ', time: '2026-10-12T03:00:00.000Z' }}
         />
+        </div></div>
       </section>
     </main>
   );

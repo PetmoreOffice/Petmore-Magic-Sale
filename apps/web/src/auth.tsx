@@ -5,7 +5,7 @@ import { api, getToken, setToken, setUnauthorizedHandler } from './api';
 interface AuthState {
   user: SessionUser | null;
   ready: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, beforeEnter?: () => Promise<void>) => Promise<void>;
   logout: () => Promise<void>;
   has: (...perms: Permission[]) => boolean;
 }
@@ -42,9 +42,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [refresh]);
 
-  const login = async (username: string, password: string) => {
+  // beforeEnter: หน้าเข้าสู่ระบบเล่นจังหวะ "ตรวจบัตร" ให้จบก่อนสลับไปหน้าแอป (เรียกหลังรหัสผ่านถูกเท่านั้น)
+  const login = async (username: string, password: string, beforeEnter?: () => Promise<void>) => {
     const r = await api<LoginResult>('/auth/login', { method: 'POST', body: { username, password } });
     setToken(r.token);
+    if (beforeEnter) await beforeEnter().catch(() => undefined);
     setUser(r.user);
   };
 

@@ -145,6 +145,25 @@ function HatConstellation({ className }: { className?: string }) {
 /** มุมกรอบสมุดคาถา: ประกายทองเล็กที่มุมทั้งสี่ของเส้นกรอบใน */
 const CORNERS = ['top-2 left-2', 'top-2 right-2', 'bottom-2 left-2', 'bottom-2 right-2'];
 
+/**
+ * กรอบสมุดคาถาสำหรับการ์ดพื้นสว่าง/พื้นผิวปกติ (เช่น การ์ดเข้าสู่ระบบ): เส้นทองบางด้านในห่างขอบ 8px + ประกายสี่มุม
+ * ชุดเดียวกับ StageDecor แต่สีเข้มพอบนพื้นการ์ดโหมดสว่าง แม่ต้องเป็น relative isolate
+ */
+export function SpellFrame({ inset = 2, className }: { inset?: 2 | 3; className?: string }) {
+  // inset 3 (12px) ใช้กับบัตรที่มีรอยเว้า 14px ที่มุม: มุมโค้งของกรอบจะไม่ชนรอยเว้า
+  const pos = inset === 3 ? ['top-3 left-3', 'top-3 right-3', 'bottom-3 left-3', 'bottom-3 right-3'] : CORNERS;
+  return (
+    <>
+      <div aria-hidden className={cn('pointer-events-none absolute -z-10 rounded-xl border border-star-ink/25 dark:border-star/25', inset === 3 ? 'inset-3' : 'inset-2', className)} />
+      {pos.map((c) => (
+        <svg key={c} viewBox="0 0 24 24" aria-hidden className={cn('pointer-events-none absolute -z-10 size-3 text-star-ink/70 dark:text-star/70', c, c.includes('right') ? 'translate-x-1/2' : '-translate-x-1/2', c.includes('bottom') ? 'translate-y-1/2' : '-translate-y-1/2', className)}>
+          <path d={SPARKLE} fill="currentColor" />
+        </svg>
+      ))}
+    </>
+  );
+}
+
 /** พื้นเวที: แสงจากด้านบน + ม่านกำมะหยี่สองข้าง ใช้ร่วมกันทุกป้ายบนท้องฟ้า (เวทีหัวหน้า กล่องสแกน) */
 export const STAGE_BACKGROUND =
   'radial-gradient(ellipse at 50% -70%, color-mix(in oklab, var(--pm-stage-light) 30%, transparent), transparent 75%), linear-gradient(110deg, var(--pm-velvet), transparent 32%, transparent 68%, var(--pm-velvet))';

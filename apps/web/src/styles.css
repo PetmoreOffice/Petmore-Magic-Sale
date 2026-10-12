@@ -275,6 +275,40 @@
     opacity: 1;
   }
 }
+/* หน้าเข้าสู่ระบบ: ต้นขั้วบัตรฉีกออก + ตราประทับ "ตรวจแล้ว" (ปิดการเคลื่อนไหว = ประทับอย่างเดียว ไม่ฉีก) */
+@keyframes ticket-tear {
+  to {
+    transform: translate(56px, 18px) rotate(13deg);
+    opacity: 0;
+  }
+}
+@keyframes ticket-tear-down {
+  to {
+    transform: translate(10px, 54px) rotate(11deg);
+    opacity: 0;
+  }
+}
+@keyframes stamp-in {
+  from {
+    transform: rotate(-12deg) scale(1.7);
+    opacity: 0;
+  }
+  to {
+    transform: rotate(-12deg) scale(1);
+    opacity: 1;
+  }
+}
+/* ดาวฉากหลังหน้าเข้าสู่ระบบ: ระยิบ (opacity อย่างเดียว) + ดาวตกนานๆ ครั้ง (วิ่งช่วงสั้นๆ ต้นรอบ ที่เหลือซ่อน) */
+@keyframes twinkle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.25; }
+}
+@keyframes shooting-star {
+  0% { opacity: 0; translate: 0 0; }
+  2% { opacity: 1; }
+  10% { opacity: 0; translate: -38vw 21vw; }
+  100% { opacity: 0; translate: -38vw 21vw; }
+}
 @keyframes scan-flash {
   from {
     opacity: 1;
@@ -365,6 +399,11 @@
   /* ไอคอนกำลังโหลด: ไม่หมุน แต่ยังจางเข้า-ออกช้าๆ ให้รู้ว่าระบบยังทำงานอยู่ (กฎด้านบนจะหยุดมันนิ่ง) */
   .animate-spin {
     animation: pm-busy 1.6s ease-in-out infinite !important;
+  }
+  /* แสงตอบรับการสแกน (ทอง = เจอ, แดง = ผิด): ไม่เคลื่อนไหว แต่ติดค้างไว้ให้เห็น 0.9 วินาทีแล้วหายทีเดียว
+     กฎ 0.01ms ด้านบนจะทำให้แสงหายก่อนตาเห็น ผู้ใช้ที่ปิดการเคลื่อนไหวจะไม่รู้ว่าสแกนผ่านหรือไม่ */
+  [data-scan-flash] {
+    animation: scan-flash 0.9s step-end forwards !important;
   }
 }
 @keyframes pm-busy {
