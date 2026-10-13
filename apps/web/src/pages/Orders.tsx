@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
 import { ArrowLeftIcon, ArrowRightIcon, CheckIcon, ClipboardListIcon, LoaderCircleIcon, MinusIcon, PlusIcon, PrinterIcon, SearchIcon, ShoppingBasketIcon, SparklesIcon, StoreIcon, Trash2Icon, Building2Icon, ChevronDownIcon, FilterIcon, XIcon } from 'lucide-react';
-import { Customer, MAX_ORDER_LINES, OrderLineInput, Paged, SalesOrder } from '@petmore/shared';
+import { Customer, MAX_ORDER_LINES, Paged, SalesOrder } from '@petmore/shared';
 import { cn } from 'cn';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,7 +16,7 @@ import StarBorder from '@/components/StarBorder';
 import BlurText from '@/components/BlurText';
 import CountUp from '@/components/CountUp';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
-import { formatQty } from '@/lib/packs';
+import { cartLineShown, formatQty, toOrderLine, type CartLine } from '@/lib/packs';
 import { scrollToStart, touchInput } from '@/lib/touch';
 import { api, formatTime, newRequestId, todayIso } from '../api';
 import { useAuth } from '../auth';
@@ -30,7 +30,7 @@ type View = 'shop' | 'cart' | 'checkout' | 'history';
 
 interface Draft {
   customer: Customer | null; phone: string; date: string;
-  reference: string; note: string; lines: OrderLineInput[]; requestId: string;
+  reference: string; note: string; lines: CartLine[]; requestId: string;
 }
 // Keep each user's draft across in-app navigation without persisting personal data to disk.
 const drafts = new Map<string, Draft>();
@@ -45,7 +45,7 @@ export function OrdersPage() {
   const [date, setDate] = useState(draft?.date ?? todayIso());
   const [reference, setReference] = useState(draft?.reference ?? '');
   const [note, setNote] = useState(draft?.note ?? '');
-  const [lines, setLines] = useState<OrderLineInput[]>(draft?.lines ?? []);
+  const [lines, setLines] = useState<CartLine[]>(draft?.lines ?? []);
   const [requestId, setRequestId] = useState(() => draft?.requestId ?? newRequestId());
   const [saving, setSaving] = useState(false);
   const saveLock = useRef(false);
@@ -103,7 +103,7 @@ export function OrdersPage() {
     go('shop');
   }
 
-  function addLine(line: OrderLineInput): string | null {
+  function addLine(line: CartLine): string | null {
     // สินค้า + บาร์โค้ดเดิมซ้ำ รวมจำนวนในบรรทัดเดิมแทนการเพิ่มบรรทัดใหม่
     const same = lines.findIndex((l) => l.sku && l.sku === line.sku && l.packCode === line.packCode);
     if (same < 0 && lines.length >= MAX_ORDER_LINES) return `ตะกร้าเต็มแล้ว (สูงสุด ${MAX_ORDER_LINES} รายการ) บันทึกออเดอร์นี้ก่อน แล้วจดออเดอร์ใหม่สำหรับสินค้าที่เหลือ`;
@@ -125,7 +125,7 @@ export function OrdersPage() {
     if (!date) return setMessage({ kind: 'error', text: 'ใส่วันที่รับออเดอร์ก่อนบันทึก' });
     saveLock.current = true; setSaving(true);
     try {
-      const saved = await api<SalesOrder>('/orders', { method: 'POST', body: { requestId, customerCode: customer.code, phone, date, reference, note, lines } });
+      const saved = await api<SalesOrder>('/orders', { method: 'POST', body: { requestId, customerCode: customer.code, phone, date, reference, note, lines: lines.map(toOrderLine) } });
       startNew(); setSelected(saved); setJustSaved(true);
       setHistoryVersion((v) => v + 1);
     } catch (e) { setMessage(errorMessage(e)); }
@@ -217,13 +217,16 @@ export function OrdersPage() {
                 </div>
               ) : (
                 <ul className="divide-y divide-border border-y border-border">
-                  {lines.map((line, index) => (
+                  {lines.map((line, index) => {
+                    const shown = cartLineShown(line);
+                    return (
                     <li key={index} className="grid gap-3 py-4 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
                       <div className="flex min-w-0 items-start gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium break-words">{line.name}</p>
+                          <p className="font-medium break-words">{shown.name}</p>
                           <p className="text-sm text-muted-foreground tabular-nums">
-                            {(line.packCode || lineCode(line)) && <span className="font-mono break-all">{line.packCode || lineCode(line)}</span>}
+                            {(shown.code || lineCode(line)) && <span className="font-mono break-all">{shown.code || lineCode(line)}</span>}
+                            {shown.wholesale && <> · <span className="font-medium text-star-ink">เรทส่ง</span></>}
                             {!line.sku && <> · สินค้านอกทะเบียน</>}
                           </p>
                         </div>
@@ -241,7 +244,8 @@ export function OrdersPage() {
                         </div>
                       </div>
                     </li>
-                  ))}
+                    );
+                  })}
                 </ul>
               )}
             </CardContent>
@@ -346,7 +350,7 @@ function Steps({ current, hasLines, onGo }: { current: View; hasLines: boolean; 
 }
 
 /** กล่องสรุปยอดข้างขวาบนจอคอม (ล่างสุดบนมือถือ) ใส่ปุ่มไปขั้นต่อไปผ่าน children */
-function Summary({ count, lines, children }: { count: number; lines?: OrderLineInput[]; children: ReactNode }) {
+function Summary({ count, lines, children }: { count: number; lines?: CartLine[]; children: ReactNode }) {
   return (
     <Card className="lg:sticky lg:top-20">
       <CardHeader><CardTitle role="heading" aria-level={2}>สรุปออเดอร์</CardTitle></CardHeader>
@@ -355,7 +359,7 @@ function Summary({ count, lines, children }: { count: number; lines?: OrderLineI
           <ul className="grid max-h-64 gap-2 overflow-y-auto overscroll-contain text-sm">
             {lines.map((line, i) => (
               <li key={i} className="flex justify-between gap-3">
-                <span className="min-w-0 break-words">{line.name}</span>
+                <span className="min-w-0 break-words">{cartLineShown(line).name}</span>
                 <span className="max-w-[45%] text-right font-semibold tabular-nums [overflow-wrap:anywhere]">{formatQty(line.qty)} {line.unit}</span>
               </li>
             ))}

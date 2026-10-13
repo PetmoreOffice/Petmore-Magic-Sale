@@ -1,7 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { CheckCounts, CheckFilter, Customer, MAX_ORDER_LINES, OrderInput, Paged, PickCheck, PickCheckInput, PickCheckPart, SalesOrder, SessionUser } from '@petmore/shared';
+import { CheckCounts, CheckFilter, Customer, MAX_ORDER_LINES, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, SalesOrder, SessionUser } from '@petmore/shared';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { audit, nextDocNo, optionalText, requireRequestId, requireText } from '../common/util';
 import { isUniqueViolation, PrismaService } from '../prisma/prisma.service';
@@ -266,10 +266,13 @@ export class OrdersService {
         for (const [index, line] of body.lines.entries()) {
           let name = requireText(line.name, 'ชื่อสินค้า', 200);
           let unit = requireText(line.unit, 'หน่วย', 30);
+          let packCode = line.packCode;
           if (line.sku) {
-            const product = await tx.product.findUnique({ where: { sku: line.sku } });
+            const product = await tx.product.findUnique({ where: { sku: line.sku }, include: { packs: true } });
             if (!product?.active) throw new BadRequestException(`ไม่พบสินค้า ${line.sku} หรือสินค้าถูกปิดใช้งาน ลบรายการนี้แล้วเลือกสินค้าอื่น`);
-            const pack = await resolvePack(tx, product, line.packCode);
+            // บาร์ที่มีบาร์ L คู่กัน: ครบ 12 ชิ้นใช้บาร์ L ไม่ถึงใช้บาร์ปกติ (เซิร์ฟเวอร์ตัดสินเอง ไม่เชื่อบาร์ที่หน้าเว็บส่งมา)
+            if (packCode) packCode = packCodeForQty(product.packs, packCode, line.qty);
+            const pack = await resolvePack(tx, product, packCode);
             if (!pack) throw new BadRequestException(`ขนาดบรรจุของ ${line.sku} ใช้ไม่ได้แล้ว เลือกขนาดบรรจุใหม่`);
             name = pack.name;
             unit = pack.unitName;
@@ -278,7 +281,7 @@ export class OrdersService {
           const amount = new Prisma.Decimal(line.unitPrice).mul(line.qty).toDecimalPlaces(2);
           total = total.add(amount);
           if (total.gte('1000000000000')) throw new BadRequestException('ยอดรวมออเดอร์สูงเกินที่ระบบรองรับ ตรวจจำนวนและราคาอีกครั้ง');
-          lines.push({ ...line, name, unit, lineNo: index + 1, amount });
+          lines.push({ ...line, packCode, name, unit, lineNo: index + 1, amount });
         }
         const id = await nextDocNo(tx, 'SO');
         const order = await tx.salesOrder.create({ data: {

@@ -1,4 +1,20 @@
-import type { PackSize, Product, ProductPack } from '@petmore/shared';
+import { WHOLESALE_MIN_PIECES, type OrderLineInput, type PackSize, type Product, type ProductPack } from '@petmore/shared';
+
+/**
+ * รายการในตะกร้า: packCode เป็นบาร์ปกติเสมอ wholesale = บาร์ L คู่กัน (ใช้แสดงในตะกร้าเท่านั้น ไม่ส่งไปเซิร์ฟเวอร์)
+ * เซิร์ฟเวอร์ตัดสินบาร์ที่ใช้จริงเองตอนบันทึก ด้วย packCodeForQty ใน shared
+ */
+export type CartLine = OrderLineInput & { wholesale?: { code: string; name: string; pieces: number } };
+
+/** บาร์และชื่อที่จะใช้จริงตามจำนวนในตะกร้า (กติกาเดียวกับ packCodeForQty) */
+export function cartLineShown(line: CartLine): { code: string; name: string; wholesale: boolean } {
+  const w = line.wholesale;
+  if (w && Math.round(w.pieces * line.qty * 1000) >= WHOLESALE_MIN_PIECES * 1000) return { code: w.code, name: w.name, wholesale: true };
+  return { code: line.packCode, name: line.name, wholesale: false };
+}
+
+/** ตัดข้อมูลที่ใช้แสดงในตะกร้าออกก่อนส่งออเดอร์ */
+export const toOrderLine = ({ wholesale: _wholesale, ...line }: CartLine): OrderLineInput => line;
 
 export interface BreakdownPart {
   unitName: string;

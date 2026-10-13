@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { ArrowLeftIcon, ChevronRightIcon, LoaderCircleIcon, PencilLineIcon, SearchIcon, ShoppingBasketIcon } from 'lucide-react';
 import { cn } from 'cn';
-import { CatalogItem, OrderLineInput, Paged, Product, ProductPack, ProductType } from '@petmore/shared';
+import { CatalogItem, packCodeForQty, Paged, Product, ProductPack, ProductType, retailOf, WHOLESALE_MIN_PIECES, wholesaleOf, withoutWholesale } from '@petmore/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CameraButton } from '@/components/CameraButton';
@@ -9,7 +9,7 @@ import { Field, Message, Notice, QtyStepper } from '@/components/wms';
 import { TONES, ToneChip, toneFor, unitTone } from '@/components/magic';
 import SpotlightCard from '@/components/SpotlightCard';
 import { CategoryPicker, NO_FILTER, typeIcon, type CategoryFilter } from '@/components/TypeRail';
-import { formatQty } from '@/lib/packs';
+import { formatQty, type CartLine } from '@/lib/packs';
 import { scrollToStart, touchInput } from '@/lib/touch';
 import { api, ApiError } from '../api';
 
@@ -35,7 +35,7 @@ function checkQty(qty: string): string | null {
  * @param filters ตัวกรองผู้สั่งที่หน้าออเดอร์วาดเอง แสดงข้างแถบชนิดสินค้า
  * @param onAdd คืนข้อความผิดพลาดถ้าเพิ่มไม่ได้ (เช่น ตะกร้าเต็ม)
  */
-export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { customerCode: string; filters?: ReactNode; onAdd: (line: OrderLineInput) => string | null; disabled?: boolean }) {
+export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { customerCode: string; filters?: ReactNode; onAdd: (line: CartLine) => string | null; disabled?: boolean }) {
   const [term, setTerm] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -91,7 +91,11 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
     return () => { live = false; };
   }, [customerCode]);
 
-  const barcodes = product?.packs ?? [];
+  // บาร์ L (เรทส่ง) ที่มีบาร์ปกติคู่กันไม่ให้เลือกเอง ระบบใช้ให้เมื่อสั่งครบ 12 ชิ้น
+  const packs = product?.packs ?? [];
+  const barcodes = withoutWholesale(packs);
+  const twin = pack ? wholesaleOf(packs, pack.code) : null;
+  const usedCode = pack ? packCodeForQty(packs, pack.code, Number(qty) || 0) : '';
 
   function resetItem() {
     setProduct(null); setPack(null); setManual(false); setItemCode(''); setItemName(''); setUnit('ชิ้น'); setQty('1');
@@ -106,8 +110,9 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
       const packs = found.packs ?? [];
       resetItem();
       setProduct(found);
-      // สแกนบาร์ไหนมาเลือกบาร์นั้น ไม่งั้นเริ่มที่บาร์โค้ดหลักของสินค้า
-      setPack(packs.find((p) => p.code === code) ?? packs.find((p) => p.code === found.barcode) ?? packs[0] ?? null);
+      // สแกนบาร์ไหนมาเลือกบาร์นั้น (สแกนบาร์ L = เลือกบาร์ปกติคู่กัน) ไม่งั้นเริ่มที่บาร์โค้ดหลักของสินค้า
+      const pick = (c: string | null | undefined) => (c ? retailOf(packs, c) ?? packs.find((p) => p.code === c) : undefined);
+      setPack(pick(code) ?? pick(found.barcode) ?? withoutWholesale(packs)[0] ?? null);
       return true;
     } catch (e) {
       if (scanned && e instanceof ApiError && e.status === 404) return false;
@@ -128,13 +133,13 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
     setMessage(null);
     const error = checkQty(qty);
     if (error) return setMessage({ kind: 'error', text: error });
-    let line: OrderLineInput;
+    let line: CartLine;
     if (manual) {
       if (!itemName.trim() || !unit.trim()) return setMessage({ kind: 'error', text: 'กรอกชื่อสินค้าและหน่วยก่อนเพิ่มลงตะกร้า' });
       line = { sku: '', itemCode: itemCode.trim(), packCode: '', name: itemName.trim(), unit: unit.trim(), qty: Number(qty) };
     } else {
       if (!product || !pack) return setMessage({ kind: 'error', text: 'เลือกบาร์โค้ดก่อนเพิ่มลงตะกร้า' });
-      line = { sku: product.sku, packCode: pack.code, name: pack.name, unit: pack.unitName, qty: Number(qty) };
+      line = { sku: product.sku, packCode: pack.code, name: pack.name, unit: pack.unitName, qty: Number(qty), ...(twin ? { wholesale: { code: twin.code, name: twin.name, pieces: pack.unitQty } } : {}) };
     }
     const refused = onAdd(line);
     if (refused) return setMessage({ kind: 'error', text: refused });
@@ -221,7 +226,7 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
                   <div className="grid gap-1.5">
                     <span id="order-barcodes" className="text-sm font-medium">เลือกบาร์โค้ดที่จะสั่ง <span className="text-muted-foreground">({barcodes.length})</span></span>
                     <div role="radiogroup" aria-labelledby="order-barcodes" className="grid gap-2 sm:grid-cols-2">
-                      {barcodes.map((p) => <BarcodeOption key={p.code} pack={p} product={product} selected={pack?.code === p.code} onSelect={() => setPack(p)} />)}
+                      {barcodes.map((p) => <BarcodeOption key={p.code} pack={p} product={product} wholesale={wholesaleOf(packs, p.code)} selected={pack?.code === p.code} onSelect={() => setPack(p)} />)}
                     </div>
                   </div>
                 ) : <Notice message={{ kind: 'error', text: 'สินค้านี้ไม่มีบาร์โค้ดที่ใช้สั่งได้ กลับไปเลือกสินค้าอื่น หรือกด “กรอกสินค้าเอง”' }} />}
@@ -230,9 +235,12 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
           </div>
           {pack && (
             <form className="grid gap-4 border-t border-border pt-4 lg:sticky lg:top-24 lg:border-t-0 lg:border-l lg:pt-0 lg:pl-6" onSubmit={(e) => { e.preventDefault(); add(); }}>
-              <p className="text-sm text-muted-foreground" aria-live="polite">
-                สั่งเป็น <span className="font-semibold text-foreground">{pack.unitName}</span> · <span className="font-mono">{pack.code}</span>
-              </p>
+              <div className="grid gap-1 text-sm text-muted-foreground" aria-live="polite">
+                <p>สั่งเป็น <span className="font-semibold text-foreground">{pack.unitName}</span> · <span className="font-mono break-all">{usedCode}</span></p>
+                {twin && (usedCode === twin.code
+                  ? <p className="font-medium text-star-ink">ใช้รหัสเรทส่งให้แล้ว (ครบ {WHOLESALE_MIN_PIECES} ชิ้น)</p>
+                  : <p>สั่งครบ {WHOLESALE_MIN_PIECES} ชิ้น ระบบใช้รหัสเรทส่ง <span className="font-mono break-all">{twin.code}</span> ให้เอง</p>)}
+              </div>
               <Field id="order-qty" label={`จำนวน (${qtyUnit || 'หน่วย'}) *`}><QtyStepper id="order-qty" label="จำนวน" value={qty} onChange={setQty} /></Field>
               <Button type="submit" size="touch" className="bg-star text-on-star hover:bg-star/90"><ShoppingBasketIcon />เพิ่มลงตะกร้า</Button>
             </form>
@@ -296,7 +304,7 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
 }
 
 /** ปุ่มเลือกบาร์โค้ด 1 ตัว: หน่วยตามฐานข้อมูล จำนวนต่อหน่วย รหัส และชื่อเรียก (GOODS_ALIAS) ถ้าต่างจากชื่อสินค้า */
-function BarcodeOption({ pack, product, selected, onSelect }: { pack: ProductPack; product: Product; selected: boolean; onSelect: () => void }) {
+function BarcodeOption({ pack, product, wholesale, selected, onSelect }: { pack: ProductPack; product: Product; wholesale: ProductPack | null; selected: boolean; onSelect: () => void }) {
   return (
     <button
       type="button"
@@ -314,6 +322,7 @@ function BarcodeOption({ pack, product, selected, onSelect }: { pack: ProductPac
       </span>
       <span className="font-mono text-sm break-all">{pack.code}</span>
       {pack.name !== product.name && <span className="text-xs text-muted-foreground break-words">{pack.name}</span>}
+      {wholesale && <span className="text-xs text-muted-foreground break-words">เรทส่ง <span className="font-mono">{wholesale.code}</span> เมื่อครบ {WHOLESALE_MIN_PIECES} ชิ้น</span>}
     </button>
   );
 }
