@@ -19,3 +19,7 @@ dev-dist/
 
 # รายงานตรวจงานออกแบบ (Impeccable audit) เก็บในเครื่องเท่านั้น
 audit/
+
+# ไฟล์ระบบ Windows
+desktop.ini
+Thumbs.db

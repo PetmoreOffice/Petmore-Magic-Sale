@@ -394,6 +394,13 @@ export type CheckFilter = 'PENDING' | 'MATCH' | 'MISMATCH' | 'ALL';
 /** จำนวนในแต่ละแท็บ + เวลาสร้างของออเดอร์ล่าสุดที่เห็นได้ (ISO, ว่าง = ยังไม่มี) หน้าตรวจของเบิกใช้รู้ว่ามีออเดอร์ใหม่เข้ามา */
 export type CheckCounts = Record<CheckFilter, number> & { latest: string };
 
+/** เหตุผลที่นับเองได้ (ไม่สแกน) ในหน้าตรวจของเบิก เซิร์ฟเวอร์รับเฉพาะค่าในรายการนี้ (ว่าง = สแกน) */
+export const MANUAL_REASONS = ['บาร์โค้ดเสีย/อ่านไม่ออก', 'ไม่มีบาร์โค้ดบนสินค้า', 'ของจำนวนมาก นับรวมทีเดียว', 'สแกนเนอร์/กล้องใช้ไม่ได้'] as const;
+
+/** ค่านี้เป็นคีย์ของ object จริงๆ (`in` จะยอมรับ "toString" / "constructor" ด้วย) */
+export const hasKey = <T extends object>(obj: T, key: unknown): key is keyof T =>
+  typeof key === 'string' && Object.prototype.hasOwnProperty.call(obj, key);
+
 /** ขนาดอื่นของ SKU เดียวกันที่ให้แทนขนาดในออเดอร์ เช่น สั่ง 1 ลัง ให้เป็นโหล 3 + ชิ้น 6 */
 export interface PickCheckPart {
   packCode: string;

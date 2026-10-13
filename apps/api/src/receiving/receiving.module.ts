@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import {
+  hasKey,
   MAX_RECEIPT_LINES,
   RECEIPT_KINDS,
   Receipt,
@@ -89,7 +90,7 @@ export class ReceivingService {
 
     const warehouse = requireText(input.warehouse, 'คลัง', 20);
     assertWarehouse(user, warehouse);
-    if (!(input.kind in RECEIPT_KINDS)) throw new BadRequestException('เลือกประเภทใบรับสินค้า');
+    if (!hasKey(RECEIPT_KINDS, input.kind)) throw new BadRequestException('เลือกประเภทใบรับสินค้า');
     if (!isIsoDate(input.date)) throw new BadRequestException('วันที่รับไม่ถูกต้อง เลือกวันที่ใหม่');
     const reference = requireText(input.reference, 'เลขที่เอกสารอ้างอิง', 100);
     const source = requireText(input.source, 'ผู้ส่ง / ที่มา', 200);
@@ -126,7 +127,7 @@ export class ReceivingService {
           const expiry = optionalText(line.expiry, 10);
           if (expiry && !isIsoDate(expiry)) throw new BadRequestException(`แถว ${no}: วันหมดอายุไม่ถูกต้อง เลือกวันที่ใหม่`);
           if (product.expiryRequired && !expiry) throw new BadRequestException(`แถว ${no}: ${product.sku} ต้องกรอกวันหมดอายุก่อนบันทึก`);
-          if (!(line.status in STOCK_STATUSES)) throw new BadRequestException(`แถว ${no}: เลือกสถานะ FG (ของดี) หรือ DM (เสียหาย)`);
+          if (!hasKey(STOCK_STATUSES, line.status)) throw new BadRequestException(`แถว ${no}: เลือกสถานะ FG (ของดี) หรือ DM (เสียหาย)`);
           clean.push({
             lineNo: no,
             sku: product.sku,

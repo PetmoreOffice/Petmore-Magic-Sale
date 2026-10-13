@@ -1,9 +1,9 @@
 import { BadRequestException, Body, ConflictException, Controller, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { MAX_ORDER_LINES, OrderReturnSummary, Paged, ProductReturn, RETURN_REASONS, ReturnInput, ReturnReason, SessionUser } from '@petmore/shared';
+import { hasKey, MAX_ORDER_LINES, OrderReturnSummary, Paged, ProductReturn, RETURN_REASONS, ReturnInput, ReturnReason, SessionUser } from '@petmore/shared';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { audit, nextDocNo, optionalText, requireRequestId, requireText } from '../common/util';
-import { PrismaService, Tx } from '../prisma/prisma.service';
+import { isUniqueViolation, PrismaService, Tx } from '../prisma/prisma.service';
 import { resolvePack } from '../products/products.module';
 
 type StoredReturn = Prisma.ProductReturnGetPayload<{ include: { lines: true; order: { select: { customerName: true } } } }>;
@@ -104,7 +104,7 @@ export class ReturnsService {
   async create(user: SessionUser, input: ReturnInput): Promise<ProductReturn> {
     if (!input || typeof input !== 'object' || !Array.isArray(input.lines)) throw new BadRequestException('ส่งใบคืนไม่สำเร็จ โหลดหน้าใหม่แล้วลองอีกครั้ง');
     const requestId = requireRequestId(input.requestId);
-    if (!(input.reason in RETURN_REASONS)) throw new BadRequestException('เลือกสาเหตุการคืน');
+    if (!hasKey(RETURN_REASONS, input.reason)) throw new BadRequestException('เลือกสาเหตุการคืน');
     const existing = await this.prisma.productReturn.findUnique({ where: { requestId }, include: INCLUDE });
     if (existing) {
       if (existing.createdById !== user.id) throw new ConflictException('ใบคืนนี้ถูกส่งไปแล้ว โหลดหน้าใหม่เพื่อดูผลล่าสุด');
@@ -113,20 +113,26 @@ export class ReturnsService {
     if (input.lines.length > MAX_ORDER_LINES * 4) throw new BadRequestException('รายการคืนมากเกินที่ระบบรองรับ แยกเป็นใบคืนหลายใบ');
     const orderId = input.orderId ? requireText(input.orderId, 'เลขออเดอร์', 50) : null;
 
-    const id = await this.prisma.$transaction(async (tx) => {
+    const save = () => this.prisma.$transaction(async (tx) => {
       const lines: Prisma.ReturnLineCreateWithoutRetInput[] = [];
       if (orderId) {
+        // ล็อกแถวออเดอร์ก่อนคิดยอด: สองเครื่องคืนออเดอร์เดียวกันพร้อมกัน เครื่องที่สองต้องรอแล้วเห็นยอดที่เครื่องแรกคืนไป
+        // (READ COMMITTED อย่างเดียวไม่พอ ทั้งคู่อ่านยอดเดิมก่อนอีกฝั่งบันทึก)
+        await tx.$queryRaw`SELECT 1 FROM "SalesOrder" WHERE id = ${orderId} FOR UPDATE`;
         const order = await tx.salesOrder.findUnique({ where: { id: orderId }, include: { lines: true } });
         if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้ ตรวจเลขออเดอร์แล้วลองอีกครั้ง');
-        // คิดยอดในธุรกรรมเดียวกัน กันสองเครื่องคืนพร้อมกันจนเกินยอดเบิก
         const summary = await this.summary(orderId, tx);
+        // ส่งรายการเดียวกันมาหลายบรรทัดในใบเดียว ต้องรวมกันก่อนเทียบยอดเบิก
+        const inThisReturn = new Map<number, number>();
         for (const line of input.lines) {
           const good = qtyValue(line.goodQty, 'จำนวนของดี'), damaged = qtyValue(line.damagedQty, 'จำนวนของเสียหาย');
           if (!good && !damaged) continue;
           const ol = order.lines.find((l) => l.lineNo === line.orderLineNo);
           if (!ol) throw new BadRequestException('มีสินค้าที่ไม่อยู่ในออเดอร์นี้ ลบรายการนั้น หรือทำใบคืนแบบไม่อ้างออเดอร์');
           const s = summary.lines.find((x) => x.orderLineNo === ol.lineNo)!;
-          if (s.returned + good + damaged > s.taken + EPS) {
+          const sofar = (inThisReturn.get(ol.lineNo) ?? 0) + good + damaged;
+          inThisReturn.set(ol.lineNo, sofar);
+          if (s.returned + sofar > s.taken + EPS) {
             throw new BadRequestException(`${ol.name} คืนเกินที่เบิกไป (เบิก ${s.taken} คืนแล้ว ${s.returned} ${s.unit}) ลดจำนวนคืนแล้วลองอีกครั้ง`);
           }
           // ยอดเป็นชิ้นเมื่อผลตรวจล่าสุดให้ขนาดอื่นแทน (หน่วยตาม summary ไม่เชื่อหน่วยจากเครื่อง)
@@ -163,7 +169,15 @@ export class ReturnsService {
       await audit(tx, 'productReturn', returnId, user.id, null, { orderId, reason: input.reason, lines: lines.length });
       return returnId;
     });
-    return this.get(id);
+    try {
+      return this.get(await save());
+    } catch (e) {
+      // กดบันทึกซ้ำพร้อมกัน (requestId เดียวกัน): คืนใบที่บันทึกไปแล้วแทน error
+      if (!isUniqueViolation(e)) throw e;
+      const dup = await this.prisma.productReturn.findUnique({ where: { requestId }, include: INCLUDE });
+      if (!dup || dup.createdById !== user.id) throw new ConflictException('ใบคืนนี้ถูกส่งไปแล้ว โหลดหน้าใหม่เพื่อดูผลล่าสุด');
+      return this.dto(dup);
+    }
   }
 }
 

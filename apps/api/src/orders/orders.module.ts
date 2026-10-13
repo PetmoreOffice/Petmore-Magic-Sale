@@ -1,7 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { CheckCounts, CheckFilter, Customer, hiddenFromOrders, MAX_ORDER_LINES, ORDER_HIDDEN_OWNERS, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, SalesOrder, SessionUser } from '@petmore/shared';
+import { CheckCounts, CheckFilter, Customer, hiddenFromOrders, MANUAL_REASONS, MAX_ORDER_LINES, ORDER_HIDDEN_OWNERS, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, SalesOrder, SessionUser } from '@petmore/shared';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { audit, nextDocNo, optionalText, requireRequestId, requireText } from '../common/util';
 import { isUniqueViolation, PrismaService } from '../prisma/prisma.service';
@@ -107,7 +107,11 @@ export class OrdersService {
       if (line.orderLineNo !== null && line.orderLineNo !== undefined) {
         const orderLine = order.lines.find((l) => l.lineNo === line.orderLineNo);
         if (!orderLine) throw new BadRequestException(`ออเดอร์นี้ไม่มีรายการที่ ${line.orderLineNo} โหลดหน้าใหม่แล้วตรวจอีกครั้ง`);
-        actual.set(orderLine.lineNo, { ...(await this.countWithParts(orderLine, qty, line.parts)), manualReason: optionalText(line.manualReason, 100) });
+        if (actual.has(orderLine.lineNo)) throw new BadRequestException(`${orderLine.name} ถูกส่งมาซ้ำ โหลดหน้าใหม่แล้วตรวจอีกครั้ง`);
+        // นับเอง (ไม่สแกน) ต้องมีเหตุผลจากรายการเท่านั้น ว่าง = สแกน
+        const manualReason = optionalText(line.manualReason, 100);
+        if (manualReason && !(MANUAL_REASONS as readonly string[]).includes(manualReason)) throw new BadRequestException('เลือกเหตุผลที่นับเองจากรายการ');
+        actual.set(orderLine.lineNo, { ...(await this.countWithParts(orderLine, qty, line.parts)), manualReason });
       } else if (qty > 0) {
         extras.push({
           sku: optionalText(line.sku, 50), itemCode: optionalText(line.itemCode, 50), packCode: optionalText(line.packCode, 100),
@@ -138,7 +142,9 @@ export class OrdersService {
     const status = lines.every((l) => diff(l) === 0)
       ? 'MATCH'
       : input.shortStock === true && !extras.length && lines.every((l) => diff(l) <= 0) ? 'PARTIAL' : 'MISMATCH';
-    const id = await this.prisma.$transaction(async (tx) => {
+    const save = () => this.prisma.$transaction(async (tx) => {
+      // ล็อกออเดอร์: ตรวจซ้ำพร้อมกันสองเครื่อง สถานะในออเดอร์ต้องตรงกับผลตรวจที่บันทึกทีหลังสุด
+      await tx.$queryRaw`SELECT 1 FROM "SalesOrder" WHERE id = ${orderId} FOR UPDATE`;
       const checkId = await nextDocNo(tx, 'CK');
       await tx.pickCheck.create({ data: {
         id: checkId, requestId, orderId, status, pickerName: optionalText(input.pickerName, 100), note: optionalText(input.note, 1000), checkedById: user.id,
@@ -148,6 +154,16 @@ export class OrdersService {
       await audit(tx, 'pickCheck', checkId, user.id, null, { orderId, status, lines: lines.length });
       return checkId;
     });
+    let id: string;
+    try {
+      id = await save();
+    } catch (e) {
+      // กดบันทึกซ้ำพร้อมกัน (requestId เดียวกัน): คืนผลที่บันทึกไปแล้วแทน error
+      if (!isUniqueViolation(e)) throw e;
+      const dup = await this.prisma.pickCheck.findUnique({ where: { requestId }, include: { lines: true } });
+      if (!dup || dup.orderId !== orderId || dup.checkedById !== user.id) throw new ConflictException('ผลตรวจนี้ถูกส่งไปแล้ว โหลดหน้าใหม่เพื่อดูผลล่าสุด');
+      return this.checkDto(dup);
+    }
     return this.checkDto((await this.prisma.pickCheck.findUnique({ where: { id }, include: { lines: true } }))!);
   }
 
@@ -255,7 +271,7 @@ export class OrdersService {
       lines: input.lines.map((line) => {
         if (!line || typeof line !== 'object') throw new BadRequestException('มีรายการสินค้าที่อ่านไม่ได้ ลบรายการนั้นแล้วเพิ่มใหม่');
         return { sku: optionalText(line.sku, 50), itemCode: optionalText(line.itemCode, 50), packCode: optionalText(line.packCode, 100), name: optionalText(line.name, 200), unit: optionalText(line.unit, 30),
-          qty: numberValue(line.qty, 'จำนวน', 3, true), unitPrice: line.unitPrice === undefined ? 0 : numberValue(line.unitPrice, 'ราคา', 2, false) };
+          qty: numberValue(line.qty, 'จำนวน', 3, true), unitPrice: 0 };
       }),
     };
     const fingerprint = createHash('sha256').update(JSON.stringify(body)).digest('hex');

@@ -50,11 +50,20 @@ export class WindowCounter {
  */
 const general = new WindowCounter(600, 60_000);
 const login = new WindowCounter(30, 10 * 60_000);
+/**
+ * คำขอจากวงภายใน (Handheld/คอมในบริษัทผ่าน Caddy พอร์ต 80): Docker Desktop บน Windows มักส่งต่อพอร์ตผ่าน NAT
+ * ทุกเครื่องในวงจึงเห็นเป็น IP เดียว (gateway ของ Docker) ใช้เพดาน 10 เท่า ไม่งั้นทั้งคลังโดนจำกัดพร้อมกัน
+ * การเดารหัสยังถูกกันที่ AuthService (ชื่อเดียวกันผิด 5 ครั้งพัก 15 นาที) คนนอกผ่าน Cloudflare ได้ IP จริงเสมอ
+ */
+const generalLan = new WindowCounter(6000, 60_000);
+const loginLan = new WindowCounter(300, 10 * 60_000);
 
 export function rateLimit(req: Request, res: Response, next: NextFunction) {
   const ip = clientIp(req);
-  const isLogin = req.method === 'POST' && req.path.replace(/\/+$/, '').endsWith('/auth/login');
-  const wait = Math.max(general.hit(ip), isLogin ? login.hit(ip) : 0);
+  const lan = PRIVATE.test(ip);
+  // Express จับ route แบบไม่สนตัวพิมพ์ (/api/AUTH/Login ก็เข้า login) ต้องเทียบเป็นตัวเล็ก
+  const isLogin = req.method === 'POST' && req.path.toLowerCase().replace(/\/+$/, '').endsWith('/auth/login');
+  const wait = Math.max((lan ? generalLan : general).hit(ip), isLogin ? (lan ? loginLan : login).hit(ip) : 0);
   if (!wait) return next();
   res.setHeader('Retry-After', String(wait));
   res.status(429).json({

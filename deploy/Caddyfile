@@ -9,16 +9,20 @@
 	handle /api/* {
 		reverse_proxy api:3000
 	}
+	# ไฟล์ที่มีเลข hash ในชื่อ เก็บแคชได้นาน ไม่เจอ = 404 จริง (ห้ามตกไป index.html แล้วถูกแคชเป็นปี)
+	handle /assets/* {
+		root * /srv
+		@exists file
+		header @exists Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
 	handle {
 		root * /srv
 		# หน้าเว็บแบบ SPA: ทุกเส้นทางที่ไม่ใช่ไฟล์ ส่ง index.html
+		# ทุกอย่างนอก /assets ต้องถามเซิร์ฟเวอร์ใหม่ทุกครั้ง (index.html, sw.js, /orders, /check ...) อัปเดตแล้วเห็นทันที
+		header Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
-		# ไฟล์ที่มีเลข hash ในชื่อ เก็บแคชได้นาน, index.html/sw.js ต้องถามใหม่ทุกครั้ง
-		@hashed path /assets/*
-		header @hashed Cache-Control "public, max-age=31536000, immutable"
-		@fresh path / /index.html /sw.js /registerSW.js /manifest.webmanifest
-		header @fresh Cache-Control "no-cache"
 	}
 }
 

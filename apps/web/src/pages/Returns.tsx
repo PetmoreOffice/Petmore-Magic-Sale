@@ -123,10 +123,14 @@ export function ReturnsPage() {
     window.scrollTo({ top: 0 });
   }
 
+  // แตะออเดอร์ซ้อนกัน (A แล้ว B) ให้ใช้ผลของครั้งล่าสุดเท่านั้น
+  const openSeq = useRef(0);
   async function openOrder(o: SalesOrder) {
     reset();
+    const seq = ++openSeq.current;
     try {
       const s = await api<OrderReturnSummary>(`/returns/order/${encodeURIComponent(o.id)}`);
+      if (seq !== openSeq.current) return;
       setSummary(s);
       setOrder(o);
       // ตั้ง ref ทันที สแกนของต่อได้เลยโดยไม่ต้องรอ render
@@ -138,7 +142,7 @@ export function ReturnsPage() {
       setDraft(draftRef.current);
       setMode('order');
     } catch (e) {
-      setMessage({ kind: 'error', text: errorText(e) });
+      if (seq === openSeq.current) setMessage({ kind: 'error', text: errorText(e) });
     }
   }
 
@@ -382,7 +386,7 @@ export function ReturnsPage() {
                         <ToneChip tone={REASON_TONE[r.reason]}>{RETURN_REASONS[r.reason]}</ToneChip>
                       </span>
                       <span className="line-clamp-1 text-sm">{r.orderId ? `${r.orderId} · ${r.customerName}` : 'ใบคืนอิสระ'}{r.returnerName && ` · ${r.returnerName}`}</span>
-                      <span className="text-xs text-muted-foreground">{formatTime(r.createdAt)} · {r.lines.length} รายการ{bad > 0 ? ` · เสียหาย ${bad}` : ''}{good > 0 && bad > 0 ? '' : ''}</span>
+                      <span className="text-xs text-muted-foreground">{formatTime(r.createdAt)} · {r.lines.length} รายการ{bad > 0 ? ` · เสียหาย ${bad}` : ''}</span>
                     </button>
                   </li>
                 );
@@ -544,8 +548,8 @@ export function ReturnsPage() {
       <div className="fixed inset-x-0 bottom-0 z-10 border-t border-on-sky/10 bg-brand px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] text-brand-foreground shadow-dock lg:hidden print:hidden">
         <div className="mx-auto grid max-w-3xl gap-2">
           <p className="text-sm" aria-live="polite">
-            คืน <span className="font-heading font-semibold text-star tabular-nums">{totals.lines}</span> รายการ · ของดี <span className="font-semibold text-mint">{totals.goodLines}</span> · เสียหาย <span className="font-semibold text-rose">{totals.damagedLines}</span>
-            {overLimit && <span className="text-rose"> · มีรายการคืนเกิน</span>}
+            คืน <span className="font-heading font-semibold text-star tabular-nums">{totals.lines}</span> รายการ · ของดี <span className="font-semibold text-on-sky-mint">{totals.goodLines}</span> · เสียหาย <span className="font-semibold text-on-sky-rose">{totals.damagedLines}</span>
+            {overLimit && <span className="text-on-sky-rose"> · มีรายการคืนเกิน</span>}
           </p>
           {saveButton}
         </div>

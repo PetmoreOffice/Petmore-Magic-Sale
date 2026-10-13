@@ -54,7 +54,7 @@ export const ROLE_DESCRIPTIONS: Record<RoleCode, string> = {
 };
 
 export function isRoleCode(value: string): value is RoleCode {
-  return value in ROLES;
+  return Object.prototype.hasOwnProperty.call(ROLES, value);
 }
 
 export const ROLE_DEFAULTS: Record<RoleCode, Permission[]> = {
@@ -70,5 +70,5 @@ export const ROLE_DEFAULTS: Record<RoleCode, Permission[]> = {
 };
 
 export function isPermission(value: string): value is Permission {
-  return value in PERMISSIONS;
+  return Object.prototype.hasOwnProperty.call(PERMISSIONS, value);
 }

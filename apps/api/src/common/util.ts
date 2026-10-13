@@ -22,7 +22,10 @@ export function requireRequestId(value: unknown): string {
 }
 
 export function isIsoDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value + 'T00:00:00Z'));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(value + 'T00:00:00Z');
+  // Date ปัดวันที่ไม่มีจริงไปเดือนถัดไป (31 ก.พ. = 3 มี.ค.) ต้องแปลงกลับแล้วได้ค่าเดิม
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
 }
 
 /** เลขเอกสารต่อเนื่องรายปี เช่น RC-2026-000001 (ต้องเรียกภายใน transaction) */

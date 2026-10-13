@@ -48,6 +48,12 @@ export const ScanInput = forwardRef<ScanInputHandle, Props>(function ScanInput(
   const [focused, setFocused] = useState(false);
   const [flash, setFlash] = useState<Flash>(null);
   const [last, setLast] = useState('');
+  const [error, setError] = useState('');
+  // Handheld สแกนรัวได้เร็วกว่าการค้นหา: เก็บรหัสที่เข้ามาระหว่างค้นหาเป็นคิว แล้วทำทีละรหัสตามลำดับ (ห้ามทิ้ง)
+  const queue = useRef<string[]>([]);
+  const running = useRef(false);
+  const onScanRef = useRef(onScan);
+  onScanRef.current = onScan;
 
   /** โฟกัสช่องสแกน แล้วอ่านสถานะจริงจากหน้าเว็บ (บางเครื่องไม่ส่ง focus event ถ้าหน้าต่างยังไม่ active) */
   function focusInput(options?: FocusOptions) {
@@ -59,18 +65,40 @@ export const ScanInput = forwardRef<ScanInputHandle, Props>(function ScanInput(
 
   useImperativeHandle(ref, () => ({ focus: () => focusInput() }), []);
 
-  async function submit(raw: string) {
+  function submit(raw: string) {
     const code = raw.trim();
-    if (!code || working) return;
     setValue('');
+    if (!code || queue.current.length >= 50) return;
+    queue.current.push(code);
+    void drain();
+  }
+
+  async function drain() {
+    if (running.current) return;
+    running.current = true;
     setWorking(true);
     try {
-      const result = await onScan(code);
-      if (result) {
-        setFlash({ kind: result.ok ? 'ok' : 'error', key: Date.now() });
-        if (result.ok && result.text) setLast(result.text);
+      while (queue.current.length) {
+        const code = queue.current.shift()!;
+        try {
+          // เรียกตัวล่าสุดของหน้าเสมอ (รหัสที่รอคิวต้องเห็นยอดหลังรหัสก่อนหน้า)
+          const result = await onScanRef.current(code);
+          if (!result) continue;
+          setFlash({ kind: result.ok ? 'ok' : 'error', key: Date.now() });
+          if (result.ok) {
+            setError('');
+            if (result.text) setLast(result.text);
+          } else {
+            // สแกนผิดต้องบอกเป็นข้อความด้วย ไม่ใช่แค่สีแดง (ผู้ใช้โปรแกรมอ่านหน้าจอ/คนตาบอดสี)
+            setError(result.text ?? `สแกน ${code} ไม่สำเร็จ`);
+          }
+        } catch {
+          setFlash({ kind: 'error', key: Date.now() });
+          setError(`สแกน ${code} ไม่สำเร็จ ลองอีกครั้ง`);
+        }
       }
     } finally {
+      running.current = false;
       setWorking(false);
     }
   }
@@ -174,7 +202,6 @@ export const ScanInput = forwardRef<ScanInputHandle, Props>(function ScanInput(
               placeholder={placeholder ?? 'สแกน หรือพิมพ์รหัส'}
               autoFocus={autoFocus}
               disabled={disabled}
-              readOnly={working}
               aria-busy={working}
               autoComplete="off"
               autoCapitalize="off"
@@ -197,6 +224,11 @@ export const ScanInput = forwardRef<ScanInputHandle, Props>(function ScanInput(
           </Button>
         </div>
 
+        {error ? (
+          <p role="alert" className="flex min-h-5 items-center gap-1.5 text-sm font-semibold text-on-sky-rose">
+            <span className="break-words">{error}</span>
+          </p>
+        ) : (
         <p className="flex min-h-5 items-center gap-1.5 text-sm text-on-sky/70" aria-live="polite">
           {last ? (
             <>
@@ -209,6 +241,7 @@ export const ScanInput = forwardRef<ScanInputHandle, Props>(function ScanInput(
             hint
           )}
         </p>
+        )}
       </div>
     </div>
 

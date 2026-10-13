@@ -5,7 +5,7 @@ import {
   HandIcon, MinusIcon, PackageIcon, PackageXIcon, PencilIcon, PlusIcon, RotateCcwIcon, SparklesIcon, StarIcon, Trash2Icon, XIcon,
 } from 'lucide-react';
 import { cn } from 'cn';
-import type { CheckCounts, CheckFilter, OrderLine, Paged, PickCheck, Product, ProductPack, SalesOrder } from '@petmore/shared';
+import { MANUAL_REASONS, type CheckCounts, type CheckFilter, type OrderLine, type Paged, type PickCheck, type Product, type ProductPack, type SalesOrder } from '@petmore/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -90,8 +90,6 @@ function piecesOf(p: Product, code: string): number | null {
   const any = p.packs?.find((x) => x.factor > 0);
   return any ? any.unitQty / any.factor : 1;
 }
-/** เหตุผลที่นับเองได้ (ไม่สแกน) บันทึกไว้ในผลตรวจให้หัวหน้าตรวจย้อน */
-const MANUAL_REASONS = ['บาร์โค้ดเสีย/อ่านไม่ออก', 'ไม่มีบาร์โค้ดบนสินค้า', 'ของจำนวนมาก นับรวมทีเดียว', 'สแกนเนอร์/กล้องใช้ไม่ได้'];
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 /** หน้ารายการรีเฟรชเองทุกกี่มิลลิวินาที (มีคนจดออเดอร์ใหม่ระหว่างเปิดหน้าค้างไว้) */
 const LIST_REFRESH_MS = 20_000;
@@ -138,6 +136,9 @@ export function CheckPage() {
   // สแกนรัวๆ เร็วกว่า React render: อ่านยอดล่าสุดจาก ref ไม่ใช่จาก state ของรอบก่อน
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  // ออเดอร์ที่เปิดอยู่จริงตอนนี้ (สแกนที่กำลังค้นหาอยู่ตอนกดเปลี่ยนออเดอร์ ต้องไม่ไปนับเข้าออเดอร์ใหม่)
+  const orderRef = useRef(order);
+  orderRef.current = order;
 
   const [tab, setTab] = useState<CheckFilter>('PENDING');
   const [counts, setCounts] = useState<CheckCounts | null>(null);
@@ -194,7 +195,8 @@ export function CheckPage() {
         setList(rows); setCounts(c); setUpdatedAt(new Date());
       })
       .catch((e) => { if (live && !silent) setMessage({ kind: 'error', text: errorText(e) }); })
-      .finally(() => { if (live && !silent) setLoadingList(false); });
+      // รอบเบื้องหลังที่มาแทนรอบที่ผู้ใช้สั่งโหลด ต้องปิดสถานะกำลังโหลดด้วย ไม่งั้นรายการจางค้าง
+      .finally(() => { if (live) setLoadingList(false); });
     return () => { live = false; };
   }, [order, query, page, tab, refreshTick]);
 
@@ -285,6 +287,7 @@ export function CheckPage() {
     catch (e) {
       if (!(e instanceof ApiError && e.status === 404)) { setMessage({ kind: 'error', text: errorText(e) }); return { ok: false }; }
     }
+    if (orderRef.current?.id !== order.id) return { ok: false, text: `เปลี่ยนออเดอร์แล้ว สแกน ${value} ใหม่อีกครั้ง` };
     if (!product) {
       setMessage({ kind: 'error', text: `ไม่พบสินค้ารหัส ${value} ลองสแกนอีกครั้ง หรือใช้บาร์โค้ดอื่นบนสินค้า` });
       return { ok: false };

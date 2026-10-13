@@ -28,10 +28,25 @@ services:
       dockerfile: deploy/Dockerfile
       target: api
     restart: unless-stopped
-    env_file: .env
+    # ส่งเฉพาะค่าที่ API ใช้ (ไม่ส่ง TUNNEL_TOKEN เข้า container ของ API)
     environment:
       DATABASE_URL: postgresql://wms:${POSTGRES_PASSWORD}@db:5432/petmore_wms
       PORT: 3000
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      MSSQL_HOST: ${MSSQL_HOST:-}
+      MSSQL_PORT: ${MSSQL_PORT:-1433}
+      MSSQL_DATABASE: ${MSSQL_DATABASE:-}
+      MSSQL_USER: ${MSSQL_USER:-}
+      MSSQL_PASSWORD: ${MSSQL_PASSWORD:-}
+      MSSQL_ENCRYPT: ${MSSQL_ENCRYPT:-}
+      MSSQL_TRUST_SERVER_CERTIFICATE: ${MSSQL_TRUST_SERVER_CERTIFICATE:-}
+      MSSQL_TLS_MIN_VERSION: ${MSSQL_TLS_MIN_VERSION:-}
+      MSSQL_PRODUCT_QUERY: ${MSSQL_PRODUCT_QUERY:-}
+      MSSQL_PACK_QUERY: ${MSSQL_PACK_QUERY:-}
+      MSSQL_CUSTOMER_QUERY: ${MSSQL_CUSTOMER_QUERY:-}
+      MSSQL_PRODUCT_CUSTOMER_QUERY: ${MSSQL_PRODUCT_CUSTOMER_QUERY:-}
+      SYNC_CRON: ${SYNC_CRON:-}
     depends_on:
       db:
         condition: service_healthy
@@ -48,7 +63,7 @@ services:
     depends_on:
       - api
 
-  # เปิดเมื่อมีโดเมนแล้ว: docker compose ... --profile tunnel up -d
+  # คนนอกบริษัทผ่าน https://petmore-magicsale.newgenman.com: docker compose --profile tunnel up -d
   tunnel:
     image: cloudflare/cloudflared:2025.9.1
     restart: unless-stopped

@@ -11,6 +11,12 @@ const CONNECT_WAIT_MS = 3000;
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
+  constructor() {
+    // ค่าตั้งต้นของ Prisma รอ connection เข้าธุรกรรมแค่ 2 วินาที กดบันทึกพร้อมกันหลายเครื่อง (หรือรอล็อกแถวออเดอร์)
+    // จะได้ error "Unable to start a transaction" แทนที่จะรอคิว ให้รอได้ 10 วินาที และทำงานในธุรกรรมได้ 20 วินาที
+    super({ transactionOptions: { maxWait: 10_000, timeout: 20_000 } });
+  }
+
   async onModuleInit() {
     for (let attempt = 1; ; attempt++) {
       try {

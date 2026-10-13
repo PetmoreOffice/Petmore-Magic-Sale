@@ -7,7 +7,8 @@ services:
       POSTGRES_PASSWORD: wms
       POSTGRES_DB: petmore_wms
     ports:
-      - "5432:5432"
+      # เปิดเฉพาะในเครื่องนี้ ไม่ให้เครื่องอื่นในวง LAN ต่อฐานข้อมูลได้
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
 

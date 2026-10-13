@@ -1,5 +1,5 @@
 import { BadRequestException, Body, Controller, ConflictException, Get, Injectable, Module, Post } from '@nestjs/common';
-import { SessionUser, WAREHOUSE_KINDS, WarehouseKind } from '@petmore/shared';
+import { hasKey, SessionUser, WAREHOUSE_KINDS, WarehouseKind } from '@petmore/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { audit, requireRequestId, requireText } from '../common/util';
@@ -27,7 +27,7 @@ export class WarehousesService {
     const code = requireText(input.code, 'รหัสคลัง', 20).toUpperCase();
     if (!/^[A-Z0-9_-]+$/.test(code)) throw new BadRequestException('รหัสคลังใช้ได้เฉพาะตัวอักษรอังกฤษ ตัวเลข _ และ - (ห้ามเว้นวรรค)');
     const name = requireText(input.name, 'ชื่อคลัง', 100);
-    if (!(input.kind in WAREHOUSE_KINDS)) throw new BadRequestException('เลือกประเภทคลัง');
+    if (!hasKey(WAREHOUSE_KINDS, input.kind)) throw new BadRequestException('เลือกประเภทคลัง');
 
     return this.prisma.$transaction(async (tx) => {
       const before = await tx.warehouse.findUnique({ where: { code } });

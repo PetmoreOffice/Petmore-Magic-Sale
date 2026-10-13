@@ -18,7 +18,7 @@ Handheld / คอมในบริษัท ──http://IP-เซิร์ฟ�
 | `web` | Caddy เสิร์ฟหน้าเว็บ และส่ง `/api` ต่อให้ api เปิดพอร์ต 80 ให้คนในวง LAN |
 | `tunnel` | cloudflared ให้คนนอกบริษัทเข้าผ่าน https (เปิดหลังซื้อโดเมนแล้ว) |
 
-ขั้นที่ 1–6 ทำได้เลยโดยไม่ต้องมีโดเมน ใช้ในวง LAN ได้ทันที ส่วนขั้นที่ 7 รอซื้อโดเมนก่อน
+ขั้นที่ 1–6 ใช้ในวง LAN ได้ทันที ขั้นที่ 7 เปิดให้คนนอกบริษัทผ่าน `https://petmore-magicsale.newgenman.com` (โดเมนบริษัทที่อยู่บน Cloudflare อยู่แล้ว ไม่ต้องซื้อใหม่)
 
 ---
 
@@ -34,6 +34,12 @@ Handheld / คอมในบริษัท ──http://IP-เซิร์ฟ�
   Test-NetConnection 192.168.10.250 -Port 1433
   ```
   ต้องขึ้น `TcpTestSucceeded : True`
+- **ต่อ Cloudflare ได้** (สำหรับขั้นที่ 7): ไฟร์วอลล์บริษัทต้องให้เครื่องนี้ต่อ**ขาออก**ไป Cloudflare พอร์ต **7844** (TCP และ UDP) ได้ ไม่ต้องเปิดพอร์ตขาเข้า เช็กใน PowerShell:
+  ```powershell
+  Test-NetConnection region1.v2.argotunnel.com -Port 7844
+  ```
+  ต้องขึ้น `TcpTestSucceeded : True` ถ้าไม่ผ่านให้ IT เปิดขาออกพอร์ตนี้ (คำสั่งนี้เช็กได้แค่ TCP ถ้า UDP ถูกบล็อก Tunnel ยังต่อได้ทาง TCP แค่ช้ากว่าเล็กน้อย)
+- **บัญชี SQL Server สำหรับ sync**: ให้ IT สร้างบัญชีที่มีสิทธิ์ **อ่านอย่างเดียว** (`db_datareader`) ไม่ใช่บัญชีผู้ดูแล ระบบรันคำสั่ง SQL ที่ตั้งใน `.env` ตรงๆ บัญชีอ่านอย่างเดียวกันพลาดเขียนข้อมูลบริษัท
 - **สิทธิ์ใช้ Docker Desktop**: ฟรีเมื่อบริษัทมีพนักงานไม่ถึง 250 คน **และ** รายได้ไม่ถึง 10 ล้านดอลลาร์ต่อปี ถ้าเกินต้องซื้อ Docker subscription
 
 ## 1. ติดตั้งโปรแกรมบนเซิร์ฟเวอร์
@@ -157,27 +163,32 @@ docker compose exec api npx tsx prisma/seed.ts
 New-NetFirewallRule -DisplayName "Petmore Magic Sale (web)" -Direction Inbound -Protocol TCP -LocalPort 80 -Action Allow -Profile Domain,Private
 ```
 
+คำสั่งนี้เปิดเฉพาะเครือข่ายแบบ Domain/Private ถ้า Handheld เข้าไม่ได้ ให้เช็กว่าเครือข่ายของเซิร์ฟเวอร์ไม่ได้ถูกตั้งเป็น Public: `Get-NetConnectionProfile` (ช่อง NetworkCategory)
+
 แล้วเปิด `http://192.168.10.20` (IP ของเซิร์ฟเวอร์) บน Handheld หรือคอม ถ้าตั้ง `HTTP_PORT=8080` ให้เปิดพอร์ต 8080 แทน และใช้ `http://192.168.10.20:8080`
 
 - หัวสแกนของ Handheld และเครื่องสแกน USB ใช้กับ http ได้ปกติ
 - **กล้องมือถือใช้ไม่ได้บน http** (เบราว์เซอร์อนุญาตเฉพาะ https) และติดตั้งเป็นไอคอนแอปไม่ได้ ต้องรอขั้นที่ 7
 
-## 7. คนนอกบริษัท (Sup ที่หน้างาน) ผ่าน Cloudflare Tunnel — ทำหลังซื้อโดเมน
+## 7. คนนอกบริษัท (Sup ที่หน้างาน) ผ่าน Cloudflare Tunnel
 
 ไม่ต้องเปิดพอร์ตที่ router และไม่ต้องมี IP จริง Cloudflare ให้ https ฟรี กล้องมือถือจึงใช้ได้
 
-1. **ซื้อโดเมน** ที่ Cloudflare dashboard → Domain Registration → Register Domains (`.com` ประมาณ 10.46 ดอลลาร์ต่อปี)
-2. **สร้าง Tunnel**: Cloudflare dashboard → Zero Trust → Networks → Tunnels → **Create a tunnel** → เลือก **Cloudflared** → ตั้งชื่อ `petmore`
-3. หน้าติดตั้ง connector เลือก **Docker** จะเห็นคำสั่งที่ลงท้ายด้วย `--token eyJ...` คัดลอกเฉพาะข้อความยาวหลัง `--token` ไปใส่ `TUNNEL_TOKEN=` ใน `deploy\.env` (**ไม่ต้อง**รันคำสั่งที่ Cloudflare ให้มา)
-4. แท็บ **Public Hostname** → Add:
-   - Subdomain: `oms` (หรือชื่ออื่น), Domain: โดเมนที่ซื้อ
+ใช้โดเมน `newgenman.com` ที่อยู่บน Cloudflare (แพ็กเกจ Free) อยู่แล้ว เพิ่มแค่ชื่อย่อย `petmore-magicsale` ไม่แตะค่าอีเมล (MX) หรือเว็บไซต์เดิม
+
+1. **เช็กชื่อว่าง**: `newgenman.com` → DNS → Records ต้องยังไม่มีชื่อ `petmore-magicsale` (ถ้ามีแล้วเลือกชื่ออื่น)
+2. **สร้าง Tunnel**: Cloudflare dashboard → Networking → Tunnels (หรือ Zero Trust → Networks → Tunnels) → **Create a tunnel** → เลือก **Cloudflared** → ตั้งชื่อ `petmore` (ถ้า Zero Trust ให้เลือกแพ็กเกจครั้งแรก เลือก Free)
+3. หน้าติดตั้ง connector เลือก **Docker** จะเห็นคำสั่งที่ลงท้ายด้วย `--token eyJ...` คัดลอกเฉพาะข้อความยาวหลัง `--token` ไปใส่ `TUNNEL_TOKEN=` ใน `deploy\.env` (**ไม่ต้อง**รันคำสั่งที่ Cloudflare ให้มา) token เป็นความลับ ห้ามส่งทางแชตหรือ commit
+4. แท็บ **Public Hostname** (หรือ Published application routes) → Add:
+   - Subdomain: `petmore-magicsale`, Domain: `newgenman.com`
    - Service Type: **HTTP**, URL: **`web:8080`**
+   - Cloudflare สร้างระเบียน CNAME `petmore-magicsale` ให้เอง สถานะ connector เป็น Inactive จนกว่าเซิร์ฟเวอร์จะเปิด tunnel
 5. เปิด tunnel บนเซิร์ฟเวอร์:
    ```powershell
    cd C:\petmore\deploy
    docker compose --profile tunnel up -d
    ```
-6. เปิด `https://oms.โดเมนของคุณ` จากมือถือ (ใช้เน็ตมือถือ ไม่ใช่ Wi-Fi บริษัท) ต้องเห็นหน้าเข้าสู่ระบบ แล้วลองกดปุ่มกล้องในหน้าตรวจของเบิก
+6. เปิด `https://petmore-magicsale.newgenman.com` จากมือถือ (ใช้เน็ตมือถือ ไม่ใช่ Wi-Fi บริษัท) ต้องเห็นหน้าเข้าสู่ระบบ แล้วลองกดปุ่มกล้องในหน้าตรวจของเบิก
 
 ข้อสำคัญ:
 - **ไม่เปิด** Cloudflare Access (ตกลงกันไว้แล้ว ใช้ล็อกอินของแอป เพราะ Access ฟรีแค่ 50 คน)
@@ -234,6 +245,7 @@ docker compose up -d --build
 | สินค้าใหม่ไม่ขึ้น | `docker compose logs api \| Select-String sync` ดูข้อความ sync ไม่สำเร็จ เช็ก `MSSQL_*` และ `MSSQL_TLS_MIN_VERSION=TLSv1` |
 | "ติดพัก 15 นาที" แต่ต้องเข้าด่วน | `docker compose restart api` (ปลดล็อกทุกชื่อ) |
 | "ลองเข้าสู่ระบบบ่อยเกินไปจากเครือข่ายนี้" | รอ 10 นาที หรือ `docker compose restart api` |
+| ขึ้น "ส่งคำขอถี่เกินไป" กับหลายเครื่องในบริษัทพร้อมกัน | Docker Desktop มักทำให้ทุกเครื่องในวงเห็นเป็น IP เดียว ระบบให้เพดานวงภายในสูงกว่าแล้ว (6,000 ครั้ง/นาที) ถ้ายังเจอ `docker compose restart api` แล้วแจ้งผู้พัฒนา |
 | tunnel ไม่ทำงาน | `docker compose --profile tunnel logs tunnel` เช็ก token และ URL `web:8080` |
 | ดิสก์เต็ม | `docker system prune` ล้าง image เก่า (ห้ามใส่ `--volumes` ข้อมูลจะหาย) |
 
