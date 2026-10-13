@@ -60,6 +60,39 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 }
 
 /**
+ * ดาวน์โหลดไฟล์จาก API (เช่น Excel) ด้วย token ของผู้ใช้ แล้วให้เบราว์เซอร์บันทึกไฟล์ คืนชื่อไฟล์ที่บันทึก
+ * ใช้ fetch + blob เพราะลิงก์ธรรมดาส่งหัว Authorization ไม่ได้
+ */
+export async function downloadFile(path: string, fallbackName: string): Promise<string> {
+  const token = getToken();
+  let res: Response;
+  try {
+    res = await fetch('/api' + path, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  } catch {
+    throw new ApiError('เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ตรวจสอบการเชื่อมต่อ แล้วลองอีกครั้ง', 0);
+  }
+  if (!res.ok) {
+    const data = await res.json().catch(() => null);
+    if (res.status === 401) {
+      setToken('');
+      onUnauthorized();
+    }
+    throw new ApiError(res.status >= 500 ? 'ระบบขัดข้องชั่วคราว ลองอีกครั้ง หากยังไม่สำเร็จให้ติดต่อผู้ดูแลระบบ' : data?.message || `ดาวน์โหลดไม่สำเร็จ (${res.status}) ลองอีกครั้ง`, res.status);
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // ให้เบราว์เซอร์เริ่มบันทึกก่อนคืนหน่วยความจำ
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  return name;
+}
+
+/**
  * requestId กันกดบันทึกซ้ำ ใช้ getRandomValues แทน crypto.randomUUID
  * เพราะ randomUUID ใช้ไม่ได้บน http ธรรมดา (Handheld ที่เข้าผ่าน IP ในวง LAN)
  */

@@ -15,6 +15,7 @@ import { ScanModule } from './scan/scan.module';
 import { SyncModule } from './sync/sync.module';
 import { OrdersModule } from './orders/orders.module';
 import { ReturnsModule } from './returns/returns.module';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { ReturnsModule } from './returns/returns.module';
     SyncModule,
     OrdersModule,
     ReturnsModule,
+    ReportsModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: AuthGuard }],
 })
