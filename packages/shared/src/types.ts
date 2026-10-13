@@ -22,7 +22,7 @@ export const RECEIPT_KINDS: Record<ReceiptKind, string> = {
 };
 
 export const MAX_RECEIPT_LINES = 50;
-export const SESSION_HOURS = 12;
+export const SESSION_HOURS = 24;
 
 export interface WarehouseScope {
   all: boolean;
