@@ -15,7 +15,7 @@ import {
 import { Prisma } from '@prisma/client';
 import type { Product as ProductRow, ProductPack as PackRow } from '@prisma/client';
 import { searchKey } from '@petmore/shared';
-import { NO_PRODUCT_TYPE, typeGroup } from '@petmore/shared';
+import { NO_PRODUCT_TYPE, ORDER_HIDDEN_OWNERS, typeGroup } from '@petmore/shared';
 import type { CatalogItem, Paged, Product, ProductPack, ProductType, SessionUser } from '@petmore/shared';
 import { PrismaService, Tx } from '../prisma/prisma.service';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
@@ -139,9 +139,10 @@ export class ProductsService {
   /** รายการชนิดสินค้า + จำนวน (ตามตัวกรองผู้สั่ง) ใช้ทำแถบชนิดสินค้าแบบร้านค้าออนไลน์ */
   async types(customerValue = ''): Promise<ProductType[]> {
     const customerCode = customerValue.trim().slice(0, 50);
+    if (ORDER_HIDDEN_OWNERS.includes(customerCode)) return [];
     const groups = await this.prisma.product.groupBy({
       by: ['categoryGroup', 'category'],
-      where: { active: true, packs: { some: { active: true } }, ...(customerCode ? { customerCode } : {}) },
+      where: { active: true, packs: { some: { active: true } }, customerCode: customerCode || { notIn: [...ORDER_HIDDEN_OWNERS] } },
       _count: { _all: true },
     });
     const map = new Map<string, ProductType>();
@@ -163,10 +164,12 @@ export class ProductsService {
     const term = q.trim().slice(0, 100);
     // เลือกผู้สั่งแล้ว แสดงเฉพาะสินค้าของผู้สั่งนั้น (SKU_ICCAT)
     const customerCode = customerValue.trim().slice(0, 50);
+    if (ORDER_HIDDEN_OWNERS.includes(customerCode)) return { rows: [], total: 0, page: 1, pages: 1 };
     const where: Prisma.ProductWhereInput = {
       active: true,
       packs: { some: { active: true } },
-      ...(customerCode ? { customerCode } : {}),
+      // สินค้าแคมเปญ (เจ้าของ KK) ไม่ให้เลือกในออเดอร์ เลือกผู้สั่งแล้วแสดงเฉพาะสินค้าของผู้สั่งนั้น
+      customerCode: customerCode || { notIn: [...ORDER_HIDDEN_OWNERS] },
       AND: this.typeWhere(type, sub),
     };
     // หมวดใหญ่ (ยังไม่ได้เลือกชนิด): รวมทุกชนิดที่จัดอยู่ในหมวดนั้น

@@ -306,6 +306,14 @@ export interface ProductType {
 export const NO_PRODUCT_TYPE = '-';
 
 /**
+ * เจ้าของสินค้า (ICCAT / SKU_ICCAT) ที่ไม่ให้สั่งในหน้าออเดอร์: "KK.แคมเปญคละ KK" = SKU/บาร์หลอกที่บริษัทตั้งไว้สร้างแคมเปญ ไม่ใช่ของจริง
+ * (784 SKU เมื่อ 2026-10-13 เช่น MIX147-..., W25-... WINTER SALE, 34SU2602003-R01 มีบาร์ EAN จริงแค่ 1 ตัว)
+ * ซ่อนจากรายการ/ชนิด/ค้นหา/สแกน และรายชื่อผู้สั่ง เซิร์ฟเวอร์ไม่รับลงออเดอร์ หน้าอื่น (รับสินค้า ตรวจของเบิก คืนสินค้า) ไม่แตะ
+ */
+export const ORDER_HIDDEN_OWNERS: readonly string[] = ['KK'];
+export const hiddenFromOrders = (p: { customerCode: string }) => ORDER_HIDDEN_OWNERS.includes(p.customerCode);
+
+/**
  * หมวดใหญ่ของชนิดสินค้า (ชั้นบนสุดในหน้าเลือกสินค้า) ICDEPT มีแค่ 2 ชั้น จึงจัดกลุ่มเองในแอป
  * จับจากคำในชื่อชนิด ลำดับสำคัญ: คำเฉพาะก่อนคำกว้าง เช่น "อาหารเสริม" ต้องเข้าสุขภาพ ไม่ใช่อาหาร
  * ชนิดใหม่ในระบบบริษัทที่ไม่เข้าข้อไหนจะไปอยู่ "อื่นๆ" เอง แก้การจัดกลุ่มที่นี่ที่เดียว
@@ -383,7 +391,8 @@ export interface OrderLine extends OrderLineInput {
 export type PickCheckStatus = 'MATCH' | 'PARTIAL' | 'MISMATCH';
 /** แท็บในหน้าตรวจของเบิก: PENDING = ยังไม่ตรวจ, MATCH = ตรวจผ่าน (รวม PARTIAL) */
 export type CheckFilter = 'PENDING' | 'MATCH' | 'MISMATCH' | 'ALL';
-export type CheckCounts = Record<CheckFilter, number>;
+/** จำนวนในแต่ละแท็บ + เวลาสร้างของออเดอร์ล่าสุดที่เห็นได้ (ISO, ว่าง = ยังไม่มี) หน้าตรวจของเบิกใช้รู้ว่ามีออเดอร์ใหม่เข้ามา */
+export type CheckCounts = Record<CheckFilter, number> & { latest: string };
 
 /** ขนาดอื่นของ SKU เดียวกันที่ให้แทนขนาดในออเดอร์ เช่น สั่ง 1 ลัง ให้เป็นโหล 3 + ชิ้น 6 */
 export interface PickCheckPart {

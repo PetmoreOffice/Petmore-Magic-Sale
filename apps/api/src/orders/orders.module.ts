@@ -1,7 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { CheckCounts, CheckFilter, Customer, MAX_ORDER_LINES, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, SalesOrder, SessionUser } from '@petmore/shared';
+import { CheckCounts, CheckFilter, Customer, hiddenFromOrders, MAX_ORDER_LINES, ORDER_HIDDEN_OWNERS, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, SalesOrder, SessionUser } from '@petmore/shared';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { audit, nextDocNo, optionalText, requireRequestId, requireText } from '../common/util';
 import { isUniqueViolation, PrismaService } from '../prisma/prisma.service';
@@ -195,9 +195,13 @@ export class OrdersService {
 
   /** จำนวนออเดอร์ในแต่ละแท็บของหน้าตรวจของเบิก (ตามสิทธิ์ที่เห็น) */
   async checkCounts(user: SessionUser): Promise<CheckCounts> {
-    const groups = await this.prisma.salesOrder.groupBy({ by: ['checkStatus'], where: this.scope(user), _count: { _all: true } });
+    const groups = await this.prisma.salesOrder.groupBy({ by: ['checkStatus'], where: this.scope(user), _count: { _all: true }, _max: { createdAt: true } });
     const n = (s: string) => groups.find((g) => g.checkStatus === s)?._count._all ?? 0;
-    return { PENDING: n(''), MATCH: n('MATCH') + n('PARTIAL'), MISMATCH: n('MISMATCH'), ALL: groups.reduce((t, g) => t + g._count._all, 0) };
+    const latest = groups.reduce((max, g) => (g._max.createdAt && g._max.createdAt > max ? g._max.createdAt : max), new Date(0));
+    return {
+      PENDING: n(''), MATCH: n('MATCH') + n('PARTIAL'), MISMATCH: n('MISMATCH'), ALL: groups.reduce((t, g) => t + g._count._all, 0),
+      latest: groups.length ? latest.toISOString() : '',
+    };
   }
 
   async list(user: SessionUser, q = '', pageValue = '1', check = ''): Promise<Paged<SalesOrder>> {
@@ -225,7 +229,8 @@ export class OrdersService {
   /** รายชื่อผู้สั่งทั้งหมด (~256 ราย) โหลดครั้งเดียวแล้วค้นในเครื่อง */
   async customers(): Promise<Customer[]> {
     const [rows, counts] = await Promise.all([
-      this.prisma.customer.findMany({ where: { active: true }, select: { code: true, name: true }, orderBy: { name: 'asc' } }),
+      // กลุ่มสินค้าแคมเปญ (KK) ไม่ใช่ผู้สั่งจริง ไม่ให้เลือก
+      this.prisma.customer.findMany({ where: { active: true, code: { notIn: [...ORDER_HIDDEN_OWNERS] } }, select: { code: true, name: true }, orderBy: { name: 'asc' } }),
       this.prisma.product.groupBy({ by: ['customerCode'], where: { active: true, customerCode: { not: '' } }, _count: { _all: true } }),
     ]);
     const count = new Map(counts.map((c) => [c.customerCode, c._count._all]));
@@ -240,6 +245,7 @@ export class OrdersService {
     const customerCode = requireText(input.customerCode, 'ผู้สั่ง', 50);
     const customer = await this.prisma.customer.findUnique({ where: { code: customerCode } });
     if (!customer?.active) throw new BadRequestException('ไม่พบผู้สั่งนี้ในทะเบียน เลือกผู้สั่งจากรายการอีกครั้ง');
+    if (ORDER_HIDDEN_OWNERS.includes(customer.code)) throw new BadRequestException(`${customer.name} เป็นกลุ่มสินค้าแคมเปญ ไม่ใช่ผู้สั่ง เลือกผู้สั่งอื่น`);
     const customerName = customer.name;
     const date = dateOnly(input.date, 'วันที่รับออเดอร์');
     if (!Array.isArray(input.lines) || !input.lines.length || input.lines.length > MAX_ORDER_LINES) throw new BadRequestException(`เพิ่มสินค้า 1–${MAX_ORDER_LINES} รายการ`);
@@ -270,6 +276,7 @@ export class OrdersService {
           if (line.sku) {
             const product = await tx.product.findUnique({ where: { sku: line.sku }, include: { packs: true } });
             if (!product?.active) throw new BadRequestException(`ไม่พบสินค้า ${line.sku} หรือสินค้าถูกปิดใช้งาน ลบรายการนี้แล้วเลือกสินค้าอื่น`);
+            if (hiddenFromOrders(product)) throw new BadRequestException(`${product.name} เป็นสินค้าแคมเปญ (${product.customerCode}) สั่งในออเดอร์ไม่ได้ ลบรายการนี้แล้วเลือกสินค้าตัวจริง`);
             // บาร์ที่มีบาร์ L คู่กัน: ครบ 12 ชิ้นใช้บาร์ L ไม่ถึงใช้บาร์ปกติ (เซิร์ฟเวอร์ตัดสินเอง ไม่เชื่อบาร์ที่หน้าเว็บส่งมา)
             if (packCode) packCode = packCodeForQty(product.packs, packCode, line.qty);
             const pack = await resolvePack(tx, product, packCode);

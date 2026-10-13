@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   ArrowLeftIcon, CheckIcon, ChevronRightIcon, ClipboardListIcon, LoaderCircleIcon, MinusIcon, PackageOpenIcon, PencilLineIcon, PlusIcon,
@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { ScanFeedback, ScanInput, ScanInputHandle } from '@/components/ScanInput';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
 import { CheckBadge, Field, Message, Notice } from '@/components/wms';
+import { OrderBarcode } from '@/components/OrderBarcode';
 import { MagicStage, Medallion, ToneChip, TONES, type Tone, SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import BlurText from '@/components/BlurText';
 import SpotlightCard from '@/components/SpotlightCard';
@@ -203,6 +204,11 @@ export function ReturnsPage() {
           await openOrder(await api<SalesOrder>('/orders/' + encodeURIComponent(value.toUpperCase())));
           return { ok: true, text: `เปิดออเดอร์ ${value.toUpperCase()}` };
         }
+        // สแกนบาร์โค้ดบนใบคืนที่พิมพ์ออกมา เปิดใบคืนนั้นดู/พิมพ์ซ้ำ
+        if (/^RT-\d{4}-\d+$/i.test(value)) {
+          setSaved(await api<ProductReturn>('/returns/' + encodeURIComponent(value.toUpperCase())));
+          return { ok: true, text: `เปิดใบคืน ${value.toUpperCase()}` };
+        }
         const product = await lookup(value);
         if (product) {
           startFree();
@@ -307,11 +313,12 @@ export function ReturnsPage() {
   if (saved) {
     return (
       <div className="mx-auto grid max-w-3xl gap-4">
-        <ReturnReceipt ret={saved} celebrate={mode !== 'home'} />
-        <div className="flex flex-wrap gap-2 print:hidden">
-          <Button size="touch" onClick={goHome}><Undo2Icon />ทำใบคืนใหม่</Button>
-          <Button size="touch" variant="outline" onClick={() => window.print()}><PrinterIcon />พิมพ์ใบคืน</Button>
-        </div>
+        <ReturnReceipt ret={saved} celebrate={mode !== 'home'} actions={
+          <>
+            <Button size="touch" variant="outline" onClick={() => window.print()}><PrinterIcon />พิมพ์ใบคืน</Button>
+            <Button size="touch" onClick={goHome}><Undo2Icon />ทำใบคืนใหม่</Button>
+          </>
+        } />
       </div>
     );
   }
@@ -635,8 +642,12 @@ function ManualItem({ onAdd }: { onAdd: (item: { itemCode: string; name: string;
   );
 }
 
-/** ใบคืนที่บันทึกแล้ว: ฉากสำเร็จบนท้องฟ้า (เฉพาะตอนเพิ่งบันทึก) + รายการ แยกของดี/เสียหาย พิมพ์ได้ */
-function ReturnReceipt({ ret, celebrate }: { ret: ProductReturn; celebrate: boolean }) {
+/**
+ * ใบคืนที่บันทึกแล้ว: ฉากสำเร็จบนท้องฟ้า (เฉพาะตอนเพิ่งบันทึก) + เอกสารแบบเดียวกับใบออเดอร์
+ * บาร์โค้ดเลขใบคืน (สแกนในหน้านี้เปิดใบคืนได้), ผู้สั่ง/สาเหตุ/ผู้คืน, รายการแยกของดี/เสียหาย
+ * พิมพ์เป็นขาวดำ มีช่องเซ็นชื่อผู้คืนและผู้รับคืนเฉพาะบนกระดาษ
+ */
+function ReturnReceipt({ ret, celebrate, actions }: { ret: ProductReturn; celebrate: boolean; actions: ReactNode }) {
   const spark = useRef<SparkBurstHandle>(null);
   const reduce = useReducedMotion();
   useEffect(() => {
@@ -659,32 +670,58 @@ function ReturnReceipt({ ret, celebrate }: { ret: ProductReturn; celebrate: bool
           </MagicStage>
         </div>
       )}
-      <Card data-print-doc>
+      <Card data-print-doc className="mx-auto w-full max-w-3xl print:max-w-none">
         <CardHeader>
-          <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="grid gap-1">
-              <CardTitle role="heading" aria-level={2}>ใบคืนสินค้า {ret.id}</CardTitle>
-              <CardDescription>{formatTime(ret.createdAt)} · {RETURN_REASONS[ret.reason]}{ret.returnerName && ` · คืนโดย ${ret.returnerName}`}</CardDescription>
+              <CardTitle role="heading" aria-level={2}>{ret.id}</CardTitle>
+              <CardDescription>ใบคืนสินค้า · บันทึกเมื่อ {formatTime(ret.createdAt)}</CardDescription>
+              <span className="print:hidden"><ToneChip tone={REASON_TONE[ret.reason]} className="h-7 px-3 text-sm">{RETURN_REASONS[ret.reason]}</ToneChip></span>
             </div>
-            <ToneChip tone={REASON_TONE[ret.reason]} className="h-7 px-3 text-sm">{ret.orderId ? `จาก ${ret.orderId}` : 'ใบคืนอิสระ'}</ToneChip>
+            <OrderBarcode id={ret.id} label="ใบคืน" />
           </div>
-          {ret.orderId && <p className="text-sm">{ret.customerName}</p>}
         </CardHeader>
-        <CardContent className="grid gap-4">
+        {/* ตอนพิมพ์ใช้ block แทน grid: Chrome ตัดหน้ากระดาษกลาง grid แล้วบรรทัดซ้อนกัน */}
+        <CardContent className="grid gap-5 print:block print:space-y-5">
+          <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+            {ret.orderId && <div className="sm:col-span-2"><dt className="text-muted-foreground">ผู้สั่ง</dt><dd className="font-heading text-lg font-semibold break-words">{ret.customerName || 'ไม่ได้ระบุ'}</dd></div>}
+            <div><dt className="text-muted-foreground">คืนจาก</dt><dd className="break-words">{ret.orderId ? <>ออเดอร์ <span className="font-mono">{ret.orderId}</span></> : 'ใบคืนอิสระ (ไม่ผูกออเดอร์)'}</dd></div>
+            <div><dt className="text-muted-foreground">สาเหตุที่คืน</dt><dd>{RETURN_REASONS[ret.reason]}</dd></div>
+            <div><dt className="text-muted-foreground">ผู้คืนสินค้า</dt><dd className="break-words">{ret.returnerName || 'ไม่ได้ระบุ'}</dd></div>
+          </dl>
           <table className="w-full text-sm">
-            <thead><tr className="border-b border-border text-left text-muted-foreground"><th className="py-2 font-medium">สินค้า</th><th className="py-2 text-right font-medium">ของดี</th><th className="py-2 text-right font-medium">เสียหาย</th></tr></thead>
+            <thead>
+              <tr className="border-b border-border text-left text-muted-foreground">
+                <th className="py-2 font-medium">สินค้า</th>
+                <th className="py-2 pl-2 text-right font-medium whitespace-nowrap">ของดี (FG)</th>
+                <th className="py-2 pl-2 text-right font-medium whitespace-nowrap">เสียหาย (DM)</th>
+              </tr>
+            </thead>
             <tbody>
               {ret.lines.map((l) => (
-                <tr key={l.lineNo} className="border-b border-border align-top">
-                  <td className="py-2 pr-2"><p className="break-words">{l.name}</p><p className="font-mono text-xs text-muted-foreground">{l.packCode || l.sku || l.itemCode} · {l.unit}</p></td>
-                  <td className="py-2 text-right font-semibold tabular-nums text-mint">{l.goodQty ? formatQty(l.goodQty) : '–'}</td>
-                  <td className="py-2 text-right font-semibold tabular-nums text-rose">{l.damagedQty ? formatQty(l.damagedQty) : '–'}</td>
+                <tr key={l.lineNo} className="break-inside-avoid border-b border-border align-top">
+                  <td className="py-3 pr-2"><p className="font-medium break-words">{l.name}</p><p className="font-mono text-xs break-all text-muted-foreground">{l.packCode || l.sku || l.itemCode}</p></td>
+                  <td className="py-3 pl-2 text-right font-semibold tabular-nums text-mint print:text-black">{l.goodQty ? <>{formatQty(l.goodQty)} <span className="font-normal">{l.unit}</span></> : '–'}</td>
+                  <td className="py-3 pl-2 text-right font-semibold tabular-nums text-rose print:text-black">{l.damagedQty ? <>{formatQty(l.damagedQty)} <span className="font-normal">{l.unit}</span></> : '–'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {ret.note && <p className="text-sm whitespace-pre-wrap">หมายเหตุ: {ret.note}</p>}
+          <p className="text-sm text-muted-foreground">รวม {ret.lines.length} รายการ</p>
+          {ret.note && <p className="text-sm whitespace-pre-wrap break-words">หมายเหตุ: {ret.note}</p>}
           <p className="text-sm text-muted-foreground">ใบคืนนี้บันทึกเป็นประวัติเท่านั้น ยอดสต็อกในคลังยังไม่เปลี่ยน</p>
+          {/* ช่องเซ็นชื่อ มีเฉพาะบนกระดาษ ถ้าถูกดันไปหน้าใหม่ยังรู้ว่าเป็นของใบคืนไหน */}
+          <div className="hidden break-inside-avoid grid-cols-2 gap-x-10 gap-y-8 pt-6 text-center text-sm print:grid">
+            <p className="col-span-2 text-left text-xs">ลงชื่อรับรองใบคืน {ret.id}{ret.orderId && ` (ออเดอร์ ${ret.orderId})`}</p>
+            {['ผู้คืนสินค้า', 'ผู้รับคืน'].map((who) => (
+              <div key={who} className="grid gap-1">
+                <span className="border-b border-black pb-6" />
+                <span>{who}</span>
+                <span className="text-xs">วันที่ ____ / ____ / ______</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 print:hidden">{actions}</div>
         </CardContent>
       </Card>
     </div>

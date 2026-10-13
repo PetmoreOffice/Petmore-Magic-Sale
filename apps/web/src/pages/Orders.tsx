@@ -390,7 +390,8 @@ function OrderReceipt({ order, actions }: { order: SalesOrder; actions: ReactNod
           <OrderBarcode id={order.id} />
         </div>
       </CardHeader>
-      <CardContent className="grid gap-5">
+      {/* ตอนพิมพ์ใช้ block แทน grid: Chrome ตัดหน้ากระดาษกลาง grid แล้วบรรทัดซ้อนกัน */}
+      <CardContent className="grid gap-5 print:block print:space-y-5">
         <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div className="sm:col-span-2"><dt className="text-muted-foreground">ผู้สั่ง{order.customerCode && <> · <span className="font-mono break-all">{order.customerCode}</span></>}</dt><dd className="font-heading text-lg font-semibold break-words">{order.customerName}</dd></div>
           <div><dt className="text-muted-foreground">เบอร์ติดต่อ</dt><dd className="break-words">{order.phone || 'ไม่ได้ระบุ'}</dd></div>

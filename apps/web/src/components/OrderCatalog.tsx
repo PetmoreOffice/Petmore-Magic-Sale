@@ -1,7 +1,7 @@
 import { ReactNode, useEffect, useRef, useState } from 'react';
 import { ArrowLeftIcon, ChevronRightIcon, LoaderCircleIcon, PencilLineIcon, SearchIcon, ShoppingBasketIcon } from 'lucide-react';
 import { cn } from 'cn';
-import { CatalogItem, packCodeForQty, Paged, Product, ProductPack, ProductType, retailOf, WHOLESALE_MIN_PIECES, wholesaleOf, withoutWholesale } from '@petmore/shared';
+import { CatalogItem, hiddenFromOrders, packCodeForQty, Paged, Product, ProductPack, ProductType, retailOf, WHOLESALE_MIN_PIECES, wholesaleOf, withoutWholesale } from '@petmore/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CameraButton } from '@/components/CameraButton';
@@ -107,6 +107,7 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
     try {
       const found = await api<Product>('/products/lookup/' + encodeURIComponent(code));
       if (!found.active) throw new Error('สินค้านี้ปิดใช้งานแล้ว เลือกสินค้าอื่น');
+      if (hiddenFromOrders(found)) throw new Error(`${found.sku} เป็นสินค้าแคมเปญคละ (${found.customerCode}) ใช้สั่งในออเดอร์ไม่ได้ สแกนบาร์โค้ดบนตัวสินค้าจริงแทน`);
       const packs = found.packs ?? [];
       resetItem();
       setProduct(found);

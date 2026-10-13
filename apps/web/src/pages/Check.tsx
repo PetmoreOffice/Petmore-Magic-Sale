@@ -93,6 +93,9 @@ function piecesOf(p: Product, code: string): number | null {
 /** เหตุผลที่นับเองได้ (ไม่สแกน) บันทึกไว้ในผลตรวจให้หัวหน้าตรวจย้อน */
 const MANUAL_REASONS = ['บาร์โค้ดเสีย/อ่านไม่ออก', 'ไม่มีบาร์โค้ดบนสินค้า', 'ของจำนวนมาก นับรวมทีเดียว', 'สแกนเนอร์/กล้องใช้ไม่ได้'];
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
+/** หน้ารายการรีเฟรชเองทุกกี่มิลลิวินาที (มีคนจดออเดอร์ใหม่ระหว่างเปิดหน้าค้างไว้) */
+const LIST_REFRESH_MS = 20_000;
+const clockTime = (d: Date) => d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
 type LineState = 'PENDING' | 'MATCH' | 'SHORT' | 'OVER';
 function lineState(actual: number, expected: number): LineState {
@@ -143,23 +146,63 @@ export function CheckPage() {
   const [page, setPage] = useState(1);
   const [loadingList, setLoadingList] = useState(false);
   const listTop = useRef<HTMLDivElement>(null);
+  // รีเฟรชเบื้องหลัง: ออเดอร์ที่เพิ่งเข้ามา (ไฮไลต์) จำนวนที่เข้ามาใหม่ และเวลาที่อัปเดตล่าสุด
+  const [refreshTick, setRefreshTick] = useState(0);
+  // ออเดอร์ที่สร้างหลัง freshSince = ใหม่ (ไฮไลต์ทุกแท็บ) จนกว่าจะเปิดตรวจหรือกดรับทราบ
+  const [freshSince, setFreshSince] = useState<string | null>(null);
+  const [opened, setOpened] = useState<ReadonlySet<string>>(new Set());
+  const [arrived, setArrived] = useState(0);
+  const [updatedAt, setUpdatedAt] = useState<Date | null>(null);
+  const background = useRef(false);
+  const last = useRef<{ all: number; latest: string } | null>(null);
+
+  // เปิดหน้ารายการค้างไว้: รีเฟรชเองทุก 20 วินาที ไม่ทำระหว่างตรวจออเดอร์ (ไม่รบกวนการสแกน)
+  // ซ่อนหน้าต่าง/ปิดจอแล้วหยุด กลับมาเห็นหน้าจอแล้วรีเฟรชทันที
+  useEffect(() => {
+    if (order) return;
+    const tick = () => {
+      if (document.visibilityState !== 'visible') return;
+      background.current = true;
+      setRefreshTick((n) => n + 1);
+    };
+    const timer = setInterval(tick, LIST_REFRESH_MS);
+    document.addEventListener('visibilitychange', tick);
+    return () => { clearInterval(timer); document.removeEventListener('visibilitychange', tick); };
+  }, [order]);
 
   useEffect(() => {
     if (order) return;
     let live = true;
-    setLoadingList(true);
+    // รีเฟรชเบื้องหลังไม่ทำให้รายการจาง ไม่ล้างไฮไลต์ และไม่ขึ้นข้อผิดพลาดซ้ำๆ ถ้าเน็ตหลุดชั่วคราว
+    const silent = background.current;
+    background.current = false;
+    if (!silent) setLoadingList(true);
     const params = new URLSearchParams({ q: query, page: String(page), check: query ? 'ALL' : tab });
     Promise.all([api<Paged<SalesOrder>>(`/orders?${params}`), api<CheckCounts>('/orders/check-counts')])
-      .then(([rows, c]) => { if (live) { setList(rows); setCounts(c); } })
-      .catch((e) => { if (live) setMessage({ kind: 'error', text: errorText(e) }); })
-      .finally(() => { if (live) setLoadingList(false); });
+      .then(([rows, c]) => {
+        if (!live) return;
+        const before = last.current;
+        if (silent && before && c.latest > before.latest) {
+          // มีออเดอร์ที่สร้างหลังรอบก่อน (เวลาจากเซิร์ฟเวอร์ ไม่ขึ้นกับนาฬิกาเครื่อง)
+          setArrived((n) => n + Math.max(1, c.ALL - before.all));
+          setFreshSince((since) => since ?? before.latest);
+        } else if (!silent) {
+          // ผู้ใช้เปลี่ยนแท็บ/ค้น/เปิดหน้าเอง: ปิดแถบแจ้ง แต่ไฮไลต์ออเดอร์ใหม่ไว้จนกว่าจะเปิดตรวจหรือกดรับทราบ
+          setArrived(0);
+        }
+        last.current = { all: c.ALL, latest: c.latest };
+        setList(rows); setCounts(c); setUpdatedAt(new Date());
+      })
+      .catch((e) => { if (live && !silent) setMessage({ kind: 'error', text: errorText(e) }); })
+      .finally(() => { if (live && !silent) setLoadingList(false); });
     return () => { live = false; };
-  }, [order, query, page, tab]);
+  }, [order, query, page, tab, refreshTick]);
 
   // จำความคืบหน้าของออเดอร์ที่กำลังตรวจ
   useEffect(() => { if (order && !result) drafts.set(order.id, draft); }, [order, draft, result]);
 
   function openOrder(o: SalesOrder) {
+    setOpened((old) => (old.has(o.id) ? old : new Set([...old, o.id])));
     setOrder(o);
     const kept = drafts.get(o.id);
     setDraft(kept ? { ...emptyDraft(), ...kept } : emptyDraft());
@@ -367,8 +410,19 @@ export function CheckPage() {
         <section ref={listTop} className="grid scroll-mt-20 gap-3" aria-labelledby="check-list-title">
           <div className="flex flex-wrap items-end justify-between gap-2">
             <h2 id="check-list-title" className="font-heading text-xl font-semibold">{query ? `ผลค้นหา “${query}”` : 'ออเดอร์ที่จะตรวจ'}</h2>
-            {query && <Button variant="ghost" size="touch" className="-mr-2" onClick={() => { setQuery(''); setPage(1); }}><XIcon />ล้างคำค้น</Button>}
+            {query
+              ? <Button variant="ghost" size="touch" className="-mr-2" onClick={() => { setQuery(''); setPage(1); }}><XIcon />ล้างคำค้น</Button>
+              : updatedAt && <p className="text-xs text-muted-foreground tabular-nums">อัปเดตเองทุก 20 วินาที · ล่าสุด {clockTime(updatedAt)}</p>}
           </div>
+          {arrived > 0 && (
+            <div role="status" className="flex flex-wrap items-center justify-between gap-2 rounded-xl border-2 border-star bg-star-soft px-4 py-2">
+              <p className="flex items-center gap-2 font-medium"><SparklesIcon className="size-5 text-star-ink dark:text-star" aria-hidden />มีออเดอร์ใหม่ {arrived} รายการ</p>
+              <div className="flex gap-1">
+                {(tab !== 'PENDING' || query) && <Button size="touch" variant="ghost" onClick={() => { setQuery(''); setTab('PENDING'); setPage(1); scanRef.current?.focus(); }}>ดูออเดอร์รอตรวจ</Button>}
+                <Button size="touch" variant="ghost" onClick={() => { setArrived(0); setFreshSince(null); setOpened(new Set()); scanRef.current?.focus(); }}>รับทราบ</Button>
+              </div>
+            </div>
+          )}
           {!query && (
             <div role="radiogroup" aria-label="สถานะการตรวจ" className="flex flex-wrap gap-2">
               {TABS.map((t) => {
@@ -406,13 +460,17 @@ export function CheckPage() {
               <ul className={cn('grid gap-2 sm:grid-cols-2', loadingList && 'opacity-60')} aria-busy={loadingList}>
                 {list.rows.map((o) => {
                   const tone: Tone = !o.lastCheck ? 'star' : o.lastCheck.status === 'MATCH' ? 'mint' : o.lastCheck.status === 'PARTIAL' ? 'kibble' : 'rose';
+                  const isFresh = freshSince !== null && o.createdAt > freshSince && !opened.has(o.id);
                   return (
                     <li key={o.id}>
-                      <SpotlightCard className="h-full transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-star/60 motion-reduce:hover:translate-y-0">
+                      <SpotlightCard className={cn('h-full transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-star/60 motion-reduce:hover:translate-y-0', isFresh && 'border-star ring-2 ring-star/40')}>
                         <button type="button" onClick={() => openOrder(o)} className="relative flex h-full min-h-24 w-full items-center gap-3 p-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset">
                           <Medallion tone={tone} icon={ClipboardListIcon} />
                           <span className="grid min-w-0 flex-1 gap-1">
-                            <strong className="line-clamp-2 font-medium break-words">{o.customerName}</strong>
+                            <strong className="line-clamp-2 font-medium break-words">
+                              {isFresh && <span className={cn('mr-1.5 inline-grid h-5 place-items-center rounded-full px-2 align-[0.1em] text-xs font-bold', TONES.star)}>ใหม่</span>}
+                              {o.customerName}
+                            </strong>
                             <span className="text-sm text-muted-foreground">{o.id} · {o.date} · {o.lines.length} รายการ</span>
                             <span><CheckBadge check={o.lastCheck} /></span>
                           </span>
