@@ -494,9 +494,9 @@ function CustomerFilter({ customer, onChange, disabled, action }: { customer: Cu
   }
   return (
     <div className="grid gap-2">
-      {/* ปุ่มกรองกับปุ่มกรอกสินค้าเองเป็นเครื่องมือหน้าค้นหาคู่กัน วางแถวเดียว */}
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Button type="button" variant="outline" size="touch" className="px-3.5 sm:px-5" aria-expanded={open} disabled={disabled} onClick={() => setOpen(!open)}>
+      {/* ปุ่มกรองกับปุ่มกรอกสินค้าเองเป็นเครื่องมือหน้าค้นหาคู่กัน วางแถวเดียว มือถือกว้างเท่ากันคนละครึ่ง */}
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-between">
+        <Button type="button" variant="outline" size="touch" className="w-full px-3.5 sm:w-auto sm:px-5" aria-expanded={open} disabled={disabled} onClick={() => setOpen(!open)}>
           <FilterIcon />กรองตามบริษัท{/* มือถือซ่อนลูกศร ให้ปุ่มคู่กับ "กรอกสินค้าเอง" พอดีแถวเดียว */}<ChevronDownIcon className={cn('hidden transition-transform sm:block', open && 'rotate-180')} />
         </Button>
         {action}

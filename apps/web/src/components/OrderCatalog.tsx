@@ -253,7 +253,7 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
   }
 
   const manualButton = (
-    <Button variant="outline" size="touch" className="px-3.5 sm:px-5" disabled={busy} onClick={() => { resetItem(); setManual(true); setMessage(null); }}><PencilLineIcon />กรอกสินค้าเอง</Button>
+    <Button variant="outline" size="touch" className="w-full px-3.5 sm:w-auto sm:px-5" disabled={busy} onClick={() => { resetItem(); setManual(true); setMessage(null); }}><PencilLineIcon />กรอกสินค้าเอง</Button>
   );
 
   return (
