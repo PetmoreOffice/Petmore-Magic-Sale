@@ -15,6 +15,10 @@
   --pm-ink: #24183a;
   --pm-muted: #6c6082;
   --pm-line: #e3dcef;
+  /* ขอบการ์ดเมนู/สินค้า ชัดกว่าเส้นทั่วไป มือถือไม่มี hover จึงต้องเห็นกรอบตั้งแต่แรก */
+  --pm-card-edge: #c9b9e4;
+  /* ทองเข้มบนพื้นขาวตายตัว (ตั๋วบาร์โค้ด) ไม่เปลี่ยนตามโหมดมืด */
+  --pm-star-deep: #a07400;
   --pm-input: #d6cce8;
   --pm-accent: #5b3fa0;
   --pm-accent-ink: #ffffff;
@@ -101,6 +105,7 @@
     --pm-ink: #efe9fb;
     --pm-muted: #a79cbd;
     --pm-line: #403349;
+    --pm-card-edge: #7d6699;
     --pm-input: #43375e;
     --pm-accent: #b9a0f0;
     --pm-accent-ink: #1a1328;
@@ -135,6 +140,8 @@
   --color-brand: var(--pm-brand);
   --color-brand-foreground: var(--pm-brand-ink);
   --color-star: var(--pm-star);
+  --color-card-edge: var(--pm-card-edge);
+  --color-star-deep: var(--pm-star-deep);
   --color-star-soft: var(--pm-star-soft);
   --color-star-ink: var(--pm-star-ink);
   --color-on-star: var(--pm-on-star);

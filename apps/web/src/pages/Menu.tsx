@@ -5,7 +5,6 @@ import { cn } from 'cn';
 import type { CheckCounts, Paged, ProductReturn } from '@petmore/shared';
 import { MagicStage, Medallion, Sparkle } from '@/components/magic';
 import SpotlightCard from '@/components/SpotlightCard';
-import { ExportExcel } from '@/components/ExportExcel';
 import { APP_MENUS } from '@/lib/menus';
 import { usePrefersReducedMotion } from '@/lib/motion';
 import { api } from '../api';
@@ -35,8 +34,6 @@ export function MenuPage() {
   const flow = SALES_FLOW.filter((t) => has(...t.perms));
   const warehouse = WAREHOUSE.filter((t) => has(...t.perms));
   const system = SYSTEM.filter((t) => has(...t.perms));
-  // ส่งออก Excel สรุปงานขาย: ตั้งต้นเฉพาะผู้ดูแลระบบ (reports.export) วางใต้การ์ดจัดการผู้ใช้
-  const canExport = has('reports.export');
   const scope = user?.warehouseScope;
   const now = new Date();
   const [counts, setCounts] = useState<CheckCounts | null>(null);
@@ -106,7 +103,7 @@ export function MenuPage() {
                       <span className="text-sm text-muted-foreground">{t.hint}</span>
                     </span>
                     <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground transition-[color,translate] duration-200 group-hover:translate-x-0.5 group-hover:text-star-ink motion-reduce:group-hover:translate-x-0 dark:group-hover:text-star" aria-hidden />
-                    <Sparkle className="absolute top-3 right-3 size-3 text-star opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100" />
+                    <Sparkle className="absolute top-3 right-3 size-3 text-star opacity-0 transition-opacity duration-300 group-hover:opacity-100 group-focus-within:opacity-100 group-active:opacity-100" />
                   </Link>
                 </SpotlightCard>
               </li>
@@ -126,7 +123,7 @@ export function MenuPage() {
               <li key={t.to}>
                 <Link
                   to={t.to}
-                  className="group flex min-h-20 items-center gap-3 rounded-lg px-2 py-4 outline-none transition-colors hover:bg-secondary focus-visible:ring-3 focus-visible:ring-primary/50"
+                  className="group flex min-h-20 items-center gap-3 rounded-lg px-2 py-4 outline-none transition-colors hover:bg-secondary active:bg-star-soft focus-visible:ring-3 focus-visible:ring-primary/50"
                 >
                   <Medallion tone={t.tone} icon={t.icon} />
                   <span className="grid min-w-0 flex-1">
@@ -140,15 +137,15 @@ export function MenuPage() {
         </section>
       )}
 
-      {(system.length > 0 || canExport) && (
+      {system.length > 0 && (
         <section className="grid gap-3 border-t border-border pt-6 lg:col-span-2" aria-labelledby="menu-system">
           <h2 id="menu-system" className="font-heading text-xl font-semibold">ตั้งค่าระบบ</h2>
-          {system.length > 0 && <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {system.map((t) => (
               <li key={t.to}>
                 <Link
                   to={t.to}
-                  className="group flex h-full min-h-20 items-center gap-3 rounded-xl border border-border bg-card p-3 outline-none transition-[border-color,background-color] hover:border-star/50 hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50"
+                  className="group flex h-full min-h-20 items-center gap-3 rounded-xl border border-card-edge bg-card p-3 outline-none transition-[border-color,background-color,box-shadow] hover:border-star/50 hover:bg-secondary active:border-star active:bg-star-soft active:shadow-lift focus-visible:ring-3 focus-visible:ring-ring/50"
                 >
                   <Medallion tone={t.tone} icon={t.icon} />
                   <span className="grid min-w-0 flex-1">
@@ -158,12 +155,11 @@ export function MenuPage() {
                 </Link>
               </li>
             ))}
-          </ul>}
-          {canExport && <ExportExcel />}
+          </ul>
         </section>
       )}
 
-      {!flow.length && !warehouse.length && !system.length && !canExport &&<p className="rounded-xl bg-secondary p-4 text-sm">บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งานเมนูใด ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์</p>}
+      {!flow.length && !warehouse.length && !system.length &&<p className="rounded-xl bg-secondary p-4 text-sm">บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งานเมนูใด ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์</p>}
     </div>
   );
 }

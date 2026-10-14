@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import {
-  ArrowLeftRightIcon, BoxesIcon, ClipboardCheckIcon, ClipboardListIcon, PackagePlusIcon, QrCodeIcon, Undo2Icon, UsersIcon,
+  ArrowLeftRightIcon, BoxesIcon, ClipboardCheckIcon, ClipboardListIcon, FileSpreadsheetIcon, PackagePlusIcon, QrCodeIcon, Undo2Icon, UsersIcon,
 } from 'lucide-react';
 import type { Permission } from '@petmore/shared';
 import type { Tone } from '@/components/magic';
@@ -32,13 +32,13 @@ export const APP_MENUS: AppMenu[] = [
   { group: 'warehouse', to: '/stock', related: ['stock.view', 'stock.print'], title: 'ดูสต็อก', short: 'สต็อก', hint: 'ค้นตาม SKU บาร์โค้ด Location ล็อต', perms: ['stock.view'], icon: BoxesIcon, tone: 'rose' },
   { group: 'warehouse', to: '/labels', related: ['locations.print'], title: 'พิมพ์ป้าย Location', short: 'ป้าย', hint: 'ป้าย QR + บาร์โค้ด A4 หน้าละ 3 ป้าย', perms: ['locations.print'], icon: QrCodeIcon, tone: 'mint' },
   { group: 'system', to: '/users', related: ['users.view', 'users.manage', 'users.audit'], title: 'จัดการผู้ใช้', short: 'ผู้ใช้', hint: 'เพิ่มผู้ใช้ ตั้งตำแหน่ง สิทธิ์ และคลัง', perms: ['users.view', 'users.manage'], icon: UsersIcon, tone: 'star' },
+  { group: 'system', to: '/export', related: ['reports.export'], title: 'ส่งออก Excel', short: 'Excel', hint: 'สรุปสินค้า ออเดอร์ และใบคืน ตามช่วงวันที่', perms: ['reports.export'], icon: FileSpreadsheetIcon, tone: 'mint' },
 ];
 
 /** สิทธิ์ที่ไม่ผูกกับเมนูใด (ทะเบียนสินค้า คลัง/โซน) แสดงต่อท้ายกลุ่มเมนูในหน้าจัดการผู้ใช้ */
 export const OTHER_PERMISSION_GROUPS: { name: string; items: Permission[] }[] = [
   { name: 'ทะเบียนสินค้า', items: ['products.manage'] },
   { name: 'คลัง โซน และ Location', items: ['locations.view', 'locations.edit', 'locations.manage'] },
-  { name: 'ส่งออก Excel (หน้าแรก)', items: ['reports.export'] },
 ];
 
 export function canOpen(menu: AppMenu, permissions: readonly Permission[]) {

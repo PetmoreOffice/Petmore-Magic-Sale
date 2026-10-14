@@ -17,6 +17,7 @@ const OrdersPage = lazy(() => import('./pages/Orders').then((m) => ({ default: m
 const CheckPage = lazy(() => import('./pages/Check').then((m) => ({ default: m.CheckPage })));
 const ReturnsPage = lazy(() => import('./pages/Returns').then((m) => ({ default: m.ReturnsPage })));
 const UsersPage = lazy(() => import('./pages/Users').then((m) => ({ default: m.UsersPage })));
+const ExportPage = lazy(() => import('./pages/Export').then((m) => ({ default: m.ExportPage })));
 
 // หน้าดูป้ายทั้งหมดสำหรับนักพัฒนา (import.meta.env.DEV เป็น false ตอน build เว็บจริง โค้ดหน้านี้จึงไม่ถูกรวม)
 const DevLabelsPage = import.meta.env.DEV ? lazy(() => import('./pages/DevLabels')) : null;
@@ -122,6 +123,7 @@ export function App() {
       <Route path="/move" element={<Guard title="ย้าย Location" perms={['move.create']}><MovePage /></Guard>} />
       <Route path="/labels" element={<Guard title="พิมพ์ป้าย Location" perms={['locations.print']}><Suspense fallback={<p className="text-sm text-muted-foreground">กำลังเปิดหน้าพิมพ์ป้าย…</p>}><LabelsPage /></Suspense></Guard>} />
       <Route path="/users" element={<Guard title="จัดการผู้ใช้" wide perms={['users.view', 'users.manage']}><Suspense fallback={<p role="status">กำลังเปิดหน้าจัดการผู้ใช้…</p>}><UsersPage /></Suspense></Guard>} />
+      <Route path="/export" element={<Guard title="ส่งออก Excel" perms={['reports.export']}><Suspense fallback={<p role="status">กำลังเปิดหน้าส่งออก Excel…</p>}><ExportPage /></Suspense></Guard>} />
       {DevLabelsPage && <Route path="/dev/labels" element={<Suspense fallback={null}><DevLabelsPage /></Suspense>} />}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

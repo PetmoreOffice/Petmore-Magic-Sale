@@ -82,7 +82,7 @@
 ## ส่งออก Excel (`GET /api/reports/export?from&to`, สิทธิ์ `reports.export`)
 
 - สิทธิ์ `reports.export` ตั้งต้นเฉพาะผู้ดูแลระบบ (ADMIN) ไฟล์มีชื่อ/เบอร์ผู้สั่งของทุกออเดอร์ ไม่มีข้อมูลผู้ใช้หรือรหัสผ่าน
-- ปุ่มอยู่หน้าแรก ใต้การ์ดจัดการผู้ใช้ในหมวดตั้งค่าระบบ (`components/ExportExcel.tsx`) ดาวน์โหลดผ่าน `downloadFile()` ใน api.ts (fetch + blob เพราะต้องส่ง token)
+- เมนู "ส่งออก Excel" หมวดตั้งค่าระบบ (ถัดจากจัดการผู้ใช้) เปิดหน้า `/export` (`pages/Export.tsx` + `components/ExportExcel.tsx`) ดาวน์โหลดผ่าน `downloadFile()` ใน api.ts (fetch + blob เพราะต้องส่ง token)
 - สร้างไฟล์ที่เซิร์ฟเวอร์ด้วย exceljs (`reports/reports.module.ts`) 4 แผ่นงาน: สรุปสินค้า (ชิ้น), ออเดอร์ (รายการ + ผลตรวจล่าสุด), ใบคืน, ข้อมูลไฟล์
 - ออเดอร์กรองตามวันที่รับออเดอร์ ใบคืนตามวันที่บันทึก (เวลาไทย) ไม่เกิน 93 วัน ขอบเขตเหมือนหน้าออเดอร์ (Sup เห็นของตัวเอง)
 - ยังไม่ตรวจ = นับว่าเบิกตามออเดอร์, ขายได้จริง = เบิกจริง − คืนที่ผูกออเดอร์, ใบคืนอิสระแยกคอลัมน์
@@ -101,6 +101,7 @@
 - ห้ามป้ายตัวเล็กเหนือหัวข้อ (eyebrow) ตามกฎของ Impeccable
 - ฟอนต์ต้องรองรับภาษาไทย (อย่าใช้ Geist/Inter เป็นฟอนต์หลัก)
 - ช่องกรอกใช้ `className={touchInput}` จาก `@/lib/touch`, เลือกรายการใช้ `<NativeSelect size="touch">` (เมนูของเครื่องเอง ใช้ง่ายบนมือถือ)
+- ขอบการ์ดเมนู/สินค้าใช้ `border-card-edge` (`--pm-card-edge` ชัดกว่า `--border`) เพราะมือถือไม่มี hover แตะแล้วขอบทอง (`active:`) + SpotlightCard วาบแสงจากจุดที่นิ้วแตะ
 - บนพื้นท้องฟ้า (bg-brand) ใช้ `on-sky/10` ฯลฯ แทน `white/10` เงาใช้ `shadow-lift` (การ์ด hover) `shadow-stage` `shadow-dock` (แถบล่าง) ห้ามเขียน `rgb(36 26 61)` เอง
 - เอกสารที่พิมพ์ (ใบออเดอร์/ใบคืน) ใส่ `data-print-doc` ที่ Card สีขาว-ดำอยู่ใน `@media print`
 - ตัวเลือกแบบ `role="radio"` ใน `role="radiogroup"` ได้ลูกศร/Home/End และ roving tabindex อัตโนมัติจาก `lib/radio.ts` (ติดตั้งที่ main.tsx) ห้ามใส่ tabIndex เอง
