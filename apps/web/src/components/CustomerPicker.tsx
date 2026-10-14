@@ -69,7 +69,7 @@ export function CustomerPicker({ value, onChange, disabled }: { value: Customer 
         value={term}
         onChange={(e) => setTerm(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (matches.length === 1) onChange(matches[0]); } }}
-        placeholder={all ? `พิมพ์รหัสหรือชื่อบริษัท (${all.length} ราย)` : 'พิมพ์รหัสหรือชื่อบริษัท'}
+        placeholder="พิมพ์รหัสหรือชื่อบริษัท"
         disabled={disabled || !all}
         autoComplete="off"
         aria-describedby={`${id}-hint`}

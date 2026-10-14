@@ -32,10 +32,10 @@ function checkQty(qty: string): string | null {
  * รายการสินค้า → แตะเข้าดู → เห็นบาร์โค้ดทุกตัวที่ผูกกับ SKU นั้น ใช้ชื่อหน่วยตามฐานข้อมูล (PC, PACK x 12 ...)
  * หยิบลงตะกร้าแล้วกลับมาที่รายการสินค้า เลือก/สแกนบาร์โค้ดตัวถัดไปได้ทันที
  * ตัวกรอง: ผู้สั่ง (SKU_ICCAT ไม่บังคับ ส่งมาจากหน้าออเดอร์) + ชนิดสินค้า/ชนิดย่อย (ICDEPT) ในแถบด้านบน
- * @param filters ตัวกรองผู้สั่งที่หน้าออเดอร์วาดเอง แสดงข้างแถบชนิดสินค้า
+ * @param filters ตัวกรองผู้สั่งที่หน้าออเดอร์วาดเอง รับปุ่ม "กรอกสินค้าเอง" ไปวางในแถวเดียวกัน
  * @param onAdd คืนข้อความผิดพลาดถ้าเพิ่มไม่ได้ (เช่น ตะกร้าเต็ม)
  */
-export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { customerCode: string; filters?: ReactNode; onAdd: (line: CartLine) => string | null; disabled?: boolean }) {
+export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { customerCode: string; filters?: (action: ReactNode) => ReactNode; onAdd: (line: CartLine) => string | null; disabled?: boolean }) {
   const [term, setTerm] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
@@ -125,8 +125,8 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
   async function search(raw = term) {
     const value = raw.trim();
     setMessage(null);
-    // สแกนบาร์โค้ดตรงตัวเปิดสินค้าเลย ไม่เจอค่อยค้นแบบคำ
-    if (value && (await open(value, true))) return;
+    // สแกนบาร์โค้ดตรงตัวเปิดสินค้าเลย แล้วล้างช่องค้นรอสแกนตัวถัดไป ไม่เจอค่อยค้นแบบคำ
+    if (value && (await open(value, true))) { setTerm(''); return; }
     setPage(1); setQuery(value);
   }
 
@@ -252,6 +252,10 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
     );
   }
 
+  const manualButton = (
+    <Button variant="outline" size="touch" className="px-3.5 sm:px-5" disabled={busy} onClick={() => { resetItem(); setManual(true); setMessage(null); }}><PencilLineIcon />กรอกสินค้าเอง</Button>
+  );
+
   return (
     <div ref={listTop} className="grid scroll-mt-20 gap-4">
       <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); void search(); }}>
@@ -260,15 +264,12 @@ export function OrderCatalog({ customerCode, filters, onAdd, disabled }: { custo
         {/* มือถือไม่มีหัวสแกน: เปิดกล้องอ่านบาร์โค้ดแล้วเปิดสินค้านั้นเลย (ไม่เจอค้นเป็นคำ) */}
         <CameraButton label="สแกนบาร์โค้ดสินค้าด้วยกล้อง" disabled={busy} onResult={(code) => { setTerm(code); void search(code); }} onClose={() => searchRef.current?.focus()} />
       </form>
-      {filters}
+      {filters ? filters(manualButton) : <div className="flex justify-end">{manualButton}</div>}
       <CategoryPicker types={types} value={category} disabled={busy} onChange={(v) => { setCategory(v); setPage(1); }} />
       <Notice message={message} />
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-muted-foreground" role="status">
+      <p className="text-sm text-muted-foreground" role="status">
           {list ? <>{query ? `ผลค้น “${query}” ` : ''}{list.total.toLocaleString('th-TH')} รายการ · หน้า {list.page}/{list.pages}</> : 'กำลังโหลดสินค้า…'}
-        </p>
-        <Button variant="outline" size="touch" disabled={busy} onClick={() => { resetItem(); setManual(true); setMessage(null); }}><PencilLineIcon />กรอกสินค้าเอง</Button>
-      </div>
+      </p>
       {list && !list.rows.length && !loading && (
         <p className="py-3 text-sm text-muted-foreground">{query ? `ไม่พบสินค้าที่ตรงกับ “${query}” ลองคำอื่น หรือกด “กรอกสินค้าเอง” ถ้าเป็นสินค้าใหม่` : 'ไม่มีสินค้าในหมวดหรือผู้สั่งที่เลือก ลองเปลี่ยนหมวด หรือล้างตัวกรองผู้สั่ง'}</p>
       )}

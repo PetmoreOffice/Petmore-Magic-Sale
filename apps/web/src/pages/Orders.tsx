@@ -179,7 +179,7 @@ export function OrdersPage() {
               customerCode={customer?.code ?? ''}
               onAdd={addLine}
               disabled={saving}
-              filters={<CustomerFilter customer={customer} onChange={setCustomer} disabled={saving} />}
+              filters={(action) => <CustomerFilter customer={customer} onChange={setCustomer} disabled={saving} action={action} />}
             />
           </section>
 
@@ -475,7 +475,7 @@ function Celebration({ order }: { order: SalesOrder }) {
  * ตัวกรองผู้สั่งในหน้าเลือกสินค้า (ไม่บังคับ): ยังไม่เลือกก็เห็นสินค้าทั้งหมด
  * เลือกแล้วเหลือเฉพาะสินค้าของบริษัทนั้น (SKU_ICCAT) และใช้เป็นผู้สั่งตั้งต้นตอนยืนยันออเดอร์
  */
-function CustomerFilter({ customer, onChange, disabled }: { customer: Customer | null; onChange: (customer: Customer | null) => void; disabled?: boolean }) {
+function CustomerFilter({ customer, onChange, disabled, action }: { customer: Customer | null; onChange: (customer: Customer | null) => void; disabled?: boolean; action?: ReactNode }) {
   const [open, setOpen] = useState(false);
   if (customer) {
     return (
@@ -488,15 +488,18 @@ function CustomerFilter({ customer, onChange, disabled }: { customer: Customer |
           <Button type="button" variant="ghost" size="icon-touch" className="rounded-full" aria-label={`ล้างตัวกรองผู้สั่ง ${customer.name} แสดงสินค้าทั้งหมด`} disabled={disabled} onClick={() => onChange(null)}><XIcon /></Button>
         </span>
         {customer.products === 0 && <span role="status" className="text-sm text-destructive">ผู้สั่งรายนี้ยังไม่มีสินค้าในทะเบียน ล้างตัวกรองเพื่อดูสินค้าทั้งหมด หรือกด “กรอกสินค้าเอง”</span>}
+        <span className="ml-auto">{action}</span>
       </div>
     );
   }
   return (
     <div className="grid gap-2">
-      <div>
-        <Button type="button" variant="outline" size="touch" aria-expanded={open} disabled={disabled} onClick={() => setOpen(!open)}>
-          <FilterIcon />กรองตามผู้สั่ง<ChevronDownIcon className={cn('transition-transform', open && 'rotate-180')} />
+      {/* ปุ่มกรองกับปุ่มกรอกสินค้าเองเป็นเครื่องมือหน้าค้นหาคู่กัน วางแถวเดียว */}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Button type="button" variant="outline" size="touch" className="px-3.5 sm:px-5" aria-expanded={open} disabled={disabled} onClick={() => setOpen(!open)}>
+          <FilterIcon />กรองตามบริษัท{/* มือถือซ่อนลูกศร ให้ปุ่มคู่กับ "กรอกสินค้าเอง" พอดีแถวเดียว */}<ChevronDownIcon className={cn('hidden transition-transform sm:block', open && 'rotate-180')} />
         </Button>
+        {action}
       </div>
       {open && <div className="rounded-xl border border-border p-3"><CustomerPicker value={null} onChange={(c) => { onChange(c); setOpen(false); }} disabled={disabled} /></div>}
     </div>

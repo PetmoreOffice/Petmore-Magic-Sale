@@ -85,7 +85,6 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
   types: ProductType[] | null; value: CategoryFilter; onChange: (value: CategoryFilter) => void; disabled?: boolean;
 }) {
   if (!types) return <div className="h-24 animate-pulse rounded-xl bg-muted/60" aria-hidden />;
-  const total = types.reduce((n, t) => n + t.count, 0);
   const groups = TYPE_GROUPS.map((g) => {
     const members = types.filter((t) => typeGroup(t.name) === g.key);
     return { ...g, types: members, count: members.reduce((n, t) => n + t.count, 0) };
@@ -101,12 +100,12 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
           const next = groups.find((g) => g.key === event.target.value);
           onChange(next ? { group: next.key, type: next.types.length === 1 ? next.types[0].name : '', sub: '' } : NO_FILTER);
         }}>
-          <NativeSelectOption value="">ทุกหมวด · {total.toLocaleString('th-TH')} รายการ</NativeSelectOption>
-          {groups.map((g) => <NativeSelectOption key={g.key} value={g.key}>{g.name} · {g.count.toLocaleString('th-TH')}</NativeSelectOption>)}
+          <NativeSelectOption value="">ทุกหมวด</NativeSelectOption>
+          {groups.map((g) => <NativeSelectOption key={g.key} value={g.key}>{g.name}</NativeSelectOption>)}
         </NativeSelect>
       </div>
       <div role="radiogroup" aria-label="หมวดสินค้า" className="hidden gap-2 sm:grid sm:grid-cols-3 lg:grid-cols-6">
-        <GroupTile selected icon={LayoutGridIcon} tone="star" label="ทุกหมวด" count={total} disabled={disabled} onClick={() => onChange(NO_FILTER)} />
+        <GroupTile selected icon={LayoutGridIcon} tone="star" label="ทุกหมวด" disabled={disabled} onClick={() => onChange(NO_FILTER)} />
         {groups.map((g) => (
           <GroupTile
             key={g.key}
@@ -114,7 +113,6 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
             icon={GROUP_ICONS[g.key]}
             tone={toneFor(g.name)}
             label={g.name}
-            count={g.count}
             disabled={disabled}
             // หมวดที่มีชนิดเดียว (เช่น ของเล่น) เลือกชนิดให้เลย จะได้เห็นชนิดย่อยทันที
             onClick={() => onChange({ group: g.key, type: g.types.length === 1 ? g.types[0].name : '', sub: '' })}
@@ -135,7 +133,6 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
         <span className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-star bg-star-soft py-1 pr-3.5 pl-1 font-semibold">
           <span className={cn('grid size-9 place-items-center rounded-full', TONES[toneFor(group.name)])}><GroupIcon className="size-[18px]" aria-hidden /></span>
           {group.name}
-          <span className="text-xs font-normal text-muted-foreground tabular-nums">{group.count.toLocaleString('th-TH')}</span>
         </span>
       </div>
       {group.types.length > 1 && type && (
@@ -144,7 +141,7 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
           <Button type="button" variant="ghost" size="touch" className="-ml-2 px-2.5" disabled={disabled} onClick={() => onChange({ group: group.key, type: '', sub: '' })}>
             <ArrowLeftIcon />ทุกชนิด
           </Button>
-          <TypeChip selected icon={typeIcon(type.name)} label={shortName(type.name)} title={type.name} count={type.count} disabled={disabled} onClick={() => onChange({ group: group.key, type: type.name, sub: '' })} />
+          <TypeChip selected icon={typeIcon(type.name)} label={shortName(type.name)} title={type.name} disabled={disabled} onClick={() => onChange({ group: group.key, type: type.name, sub: '' })} />
         </div>
       )}
       {group.types.length > 1 && !type && (
@@ -152,13 +149,13 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
         <div className="sm:hidden">
           <NativeSelect size="touch" className="w-full" aria-label={`ชนิดสินค้าในหมวด ${group.name}`} value="" disabled={disabled} onChange={(event) => onChange({ group: group.key, type: event.target.value, sub: '' })}>
             <NativeSelectOption value="">ทุกชนิด</NativeSelectOption>
-            {group.types.map((t) => <NativeSelectOption key={t.name} value={t.name}>{t.name} · {t.count.toLocaleString('th-TH')}</NativeSelectOption>)}
+            {group.types.map((t) => <NativeSelectOption key={t.name} value={t.name}>{t.name}</NativeSelectOption>)}
           </NativeSelect>
         </div>
         <div role="radiogroup" aria-label={`ชนิดสินค้าในหมวด ${group.name}`} className="hidden flex-wrap gap-2 sm:flex">
-          <TypeChip selected={!value.type} label="ทุกชนิด" count={group.count} disabled={disabled} onClick={() => onChange({ group: group.key, type: '', sub: '' })} />
+          <TypeChip selected={!value.type} label="ทุกชนิด" disabled={disabled} onClick={() => onChange({ group: group.key, type: '', sub: '' })} />
           {group.types.map((t) => (
-            <TypeChip key={t.name} selected={value.type === t.name} icon={typeIcon(t.name)} label={shortName(t.name)} title={t.name} count={t.count} disabled={disabled}
+            <TypeChip key={t.name} selected={value.type === t.name} icon={typeIcon(t.name)} label={shortName(t.name)} title={t.name} disabled={disabled}
               onClick={() => onChange({ group: group.key, type: t.name, sub: '' })} />
           ))}
         </div>
@@ -166,16 +163,16 @@ export function CategoryPicker({ types, value, onChange, disabled }: {
       )}
       {type && type.subs.length > 1 && (
         <div role="radiogroup" aria-label={`ชนิดย่อยของ ${type.name}`} className="flex flex-wrap gap-1.5">
-          <SubChip selected={!value.sub} label="ทุกแบบ" count={type.count} disabled={disabled} onClick={() => onChange({ ...value, sub: '' })} />
-          {type.subs.map((s) => <SubChip key={s.name} selected={value.sub === s.name} label={subName(s.name, type.name)} count={s.count} disabled={disabled} onClick={() => onChange({ ...value, sub: s.name })} />)}
+          <SubChip selected={!value.sub} label="ทุกแบบ" disabled={disabled} onClick={() => onChange({ ...value, sub: '' })} />
+          {type.subs.map((s) => <SubChip key={s.name} selected={value.sub === s.name} label={subName(s.name, type.name)} disabled={disabled} onClick={() => onChange({ ...value, sub: s.name })} />)}
         </div>
       )}
     </div>
   );
 }
 
-function GroupTile({ selected, onClick, icon: Icon, label, count, disabled }: {
-  selected: boolean; onClick: () => void; icon: LucideIcon; tone: keyof typeof TONES; label: string; count: number; disabled?: boolean;
+function GroupTile({ selected, onClick, icon: Icon, label, disabled }: {
+  selected: boolean; onClick: () => void; icon: LucideIcon; tone: keyof typeof TONES; label: string; disabled?: boolean;
 }) {
   return (
     <button
@@ -191,13 +188,12 @@ function GroupTile({ selected, onClick, icon: Icon, label, count, disabled }: {
     >
       <Icon className="size-4 shrink-0 text-primary" aria-hidden />
       <span className="min-w-0 flex-1 text-sm font-medium [overflow-wrap:anywhere]">{label}</span>
-      <span className="hidden text-xs text-muted-foreground tabular-nums xl:inline">{count.toLocaleString('th-TH')}</span>
     </button>
   );
 }
 
-function TypeChip({ selected, onClick, icon: Icon, label, title, count, disabled }: {
-  selected: boolean; onClick: () => void; icon?: LucideIcon; label: string; title?: string; count: number; disabled?: boolean;
+function TypeChip({ selected, onClick, icon: Icon, label, title, disabled }: {
+  selected: boolean; onClick: () => void; icon?: LucideIcon; label: string; title?: string; disabled?: boolean;
 }) {
   return (
     <button
@@ -214,12 +210,11 @@ function TypeChip({ selected, onClick, icon: Icon, label, title, count, disabled
     >
       {Icon && <Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />}
       {label}
-      <span className="text-xs text-muted-foreground tabular-nums">{count.toLocaleString('th-TH')}</span>
     </button>
   );
 }
 
-function SubChip({ selected, onClick, label, count, disabled }: { selected: boolean; onClick: () => void; label: string; count: number; disabled?: boolean }) {
+function SubChip({ selected, onClick, label, disabled }: { selected: boolean; onClick: () => void; label: string; disabled?: boolean }) {
   return (
     <button
       type="button"
@@ -233,7 +228,6 @@ function SubChip({ selected, onClick, label, count, disabled }: { selected: bool
       )}
     >
       {label}
-      <span className={cn('text-xs tabular-nums', selected ? 'opacity-80' : 'opacity-70')}>{count.toLocaleString('th-TH')}</span>
     </button>
   );
 }
