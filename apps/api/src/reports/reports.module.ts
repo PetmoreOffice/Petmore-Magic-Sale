@@ -203,7 +203,7 @@ export class ReportsController {
   constructor(private readonly reports: ReportsService) {}
 
   @Get('export')
-  @RequirePermissions('orders.view')
+  @RequirePermissions('reports.export')
   @Header('Cache-Control', 'no-store')
   async export(@CurrentUser() user: SessionUser, @Query('from') from?: string, @Query('to') to?: string) {
     const { file, name } = await this.reports.exportXlsx(user, from, to);

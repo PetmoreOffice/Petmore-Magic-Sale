@@ -38,6 +38,7 @@ export const APP_MENUS: AppMenu[] = [
 export const OTHER_PERMISSION_GROUPS: { name: string; items: Permission[] }[] = [
   { name: 'ทะเบียนสินค้า', items: ['products.manage'] },
   { name: 'คลัง โซน และ Location', items: ['locations.view', 'locations.edit', 'locations.manage'] },
+  { name: 'ส่งออก Excel (หน้าแรก)', items: ['reports.export'] },
 ];
 
 export function canOpen(menu: AppMenu, permissions: readonly Permission[]) {

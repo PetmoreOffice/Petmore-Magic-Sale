@@ -19,6 +19,7 @@ export const PERMISSIONS = {
   'users.view': 'ดูผู้ใช้',
   'users.manage': 'จัดการผู้ใช้และสิทธิ์',
   'users.audit': 'ดูประวัติการแก้ไขผู้ใช้',
+  'reports.export': 'ส่งออก Excel สรุปงานขาย',
 } as const;
 
 export type Permission = keyof typeof PERMISSIONS;
@@ -32,6 +33,7 @@ export const PERMISSION_GROUPS: { name: string; items: Permission[] }[] = [
   { name: 'สินค้า', items: ['products.manage'] },
   { name: 'คลัง โซน และ Location', items: ['locations.view', 'locations.edit', 'locations.print', 'locations.manage'] },
   { name: 'ผู้ใช้', items: ['users.view', 'users.manage', 'users.audit'] },
+  { name: 'รายงาน', items: ['reports.export'] },
 ];
 
 // ตำแหน่งเป็นแค่ค่าเริ่มต้นของสิทธิ์ แก้รายคนได้

@@ -5,6 +5,7 @@ import { cn } from 'cn';
 import type { CheckCounts, Paged, ProductReturn } from '@petmore/shared';
 import { MagicStage, Medallion, Sparkle } from '@/components/magic';
 import SpotlightCard from '@/components/SpotlightCard';
+import { ExportExcel } from '@/components/ExportExcel';
 import { APP_MENUS } from '@/lib/menus';
 import { usePrefersReducedMotion } from '@/lib/motion';
 import { api } from '../api';
@@ -34,6 +35,8 @@ export function MenuPage() {
   const flow = SALES_FLOW.filter((t) => has(...t.perms));
   const warehouse = WAREHOUSE.filter((t) => has(...t.perms));
   const system = SYSTEM.filter((t) => has(...t.perms));
+  // ส่งออก Excel สรุปงานขาย: ตั้งต้นเฉพาะผู้ดูแลระบบ (reports.export) วางใต้การ์ดจัดการผู้ใช้
+  const canExport = has('reports.export');
   const scope = user?.warehouseScope;
   const now = new Date();
   const [counts, setCounts] = useState<CheckCounts | null>(null);
@@ -137,10 +140,10 @@ export function MenuPage() {
         </section>
       )}
 
-      {system.length > 0 && (
+      {(system.length > 0 || canExport) && (
         <section className="grid gap-3 border-t border-border pt-6 lg:col-span-2" aria-labelledby="menu-system">
           <h2 id="menu-system" className="font-heading text-xl font-semibold">ตั้งค่าระบบ</h2>
-          <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {system.length > 0 && <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             {system.map((t) => (
               <li key={t.to}>
                 <Link
@@ -155,11 +158,12 @@ export function MenuPage() {
                 </Link>
               </li>
             ))}
-          </ul>
+          </ul>}
+          {canExport && <ExportExcel />}
         </section>
       )}
 
-      {!flow.length && !warehouse.length && !system.length &&<p className="rounded-xl bg-secondary p-4 text-sm">บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งานเมนูใด ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์</p>}
+      {!flow.length && !warehouse.length && !system.length && !canExport &&<p className="rounded-xl bg-secondary p-4 text-sm">บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งานเมนูใด ติดต่อผู้ดูแลระบบเพื่อขอสิทธิ์</p>}
     </div>
   );
 }
