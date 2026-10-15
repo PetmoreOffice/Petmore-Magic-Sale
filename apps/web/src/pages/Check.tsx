@@ -302,12 +302,25 @@ export function CheckPage() {
       if (scanned) return linePack ? size(linePack) === size(scanned) : l.packCode === scanned.code;
       return l.packCode === p.sku || linePack?.factor === 1;
     });
-    if (match) return bump(match);
+    const short = (l: OrderLine) => { const t = tally(draftRef.current, l); return t.actual < t.expected; };
+    if (match && short(match)) return bump(match);
 
     const pack = scanned ?? defaultPack(p, null);
-    // ขนาดอื่นของ SKU ที่อยู่ในออเดอร์ = ให้แทน (ของขนาดที่สั่งไม่พอ) นับรวมเข้ารายการที่ยังไม่ครบก่อน
-    const target = sameSku.find((l) => { const t = tally(draftRef.current, l); return t.actual < t.expected; }) ?? sameSku[0];
+    // ชิ้นที่รายการยังขาด: ของที่สแกนลงได้พอดีหรือน้อยกว่า = ให้แทนได้โดยไม่เกิน
+    const fits = (l: OrderLine) => {
+      const t = tally(draftRef.current, l);
+      const base = piecesOf(p, l.packCode);
+      if (!base || pack.unitQty <= 0) return false;
+      const missing = t.pieces ? t.expected - t.actual : (t.expected - t.actual) * base;
+      return pack.unitQty <= missing + 1e-9;
+    };
+    // ขนาดที่สแกนครบแล้ว แต่ขนาดอื่นของ SKU เดียวกันยังขาด (สั่งชิ้น+โหล+ลังในใบเดียว ลังหมดเลยให้โหลแทน)
+    // ให้นับเป็น "ให้แทน" ในรายการที่ขาด แทนการนับเกินในรายการขนาดเดียวกัน
+    const others = sameSku.filter((l) => l !== match);
+    const target = others.find((l) => short(l) && fits(l))
+      ?? (match ? undefined : others.find(short) ?? others[0]);
     if (target && addSub(target, p, pack, 1)) return feedback(target, `ให้ ${pack.unitName} แทน · `);
+    if (match) return bump(match);
 
     const reason: Extra['reason'] = sameSku.length ? 'WRONG_SIZE' : 'NOT_IN_ORDER';
     const hint = reason === 'WRONG_SIZE' ? `ออเดอร์สั่งเป็น ${sameSku.map((l) => l.unit).join(', ')}` : '';
