@@ -65,7 +65,7 @@ services:
 
   # คนนอกบริษัทผ่าน https://petmore-magicsale.newgenman.com: docker compose --profile tunnel up -d
   tunnel:
-    image: cloudflare/cloudflared:2025.9.1
+    image: cloudflare/cloudflared:2026.10.0
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
