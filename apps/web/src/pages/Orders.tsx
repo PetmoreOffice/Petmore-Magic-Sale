@@ -10,6 +10,7 @@ import { CameraButton } from '@/components/CameraButton';
 import { CheckBadge, Field, Message, Notice } from '@/components/wms';
 import { CustomerPicker } from '@/components/CustomerPicker';
 import { OrderBarcode } from '@/components/OrderBarcode';
+import { lineCode, sortBySkuCode } from '@/lib/doc-lines';
 import { OrderCatalog } from '@/components/OrderCatalog';
 import { MagicStage, SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import StarBorder from '@/components/StarBorder';
@@ -23,8 +24,6 @@ import { useAuth } from '../auth';
 
 const errorMessage = (e: unknown): Message => ({ kind: 'error', text: e instanceof Error ? e.message : String(e) });
 /** รหัสที่แสดงของรายการ: SKU จากทะเบียน หรือรหัสที่กรอกเอง */
-const lineCode = (line: { sku: string; itemCode?: string }) => line.sku || line.itemCode || '';
-
 /** ขั้นตอนจดออเดอร์แบบร้านค้าออนไลน์: เลือกผู้สั่ง + สินค้าของผู้สั่งนั้น → ตะกร้า → ยืนยัน */
 type View = 'shop' | 'cart' | 'checkout' | 'history';
 
@@ -399,12 +398,46 @@ function OrderReceipt({ order, actions }: { order: SalesOrder; actions: ReactNod
           {/* ออเดอร์เก่าก่อนเลิกใช้ช่องนัดรับ ยังแสดงให้เห็น */}
           {order.dueDate && <div><dt className="text-muted-foreground">วันที่นัดรับ / ส่ง</dt><dd>{order.dueDate}</dd></div>}
         </dl>
-        <div className="divide-y divide-border border-y border-border">
-          {order.lines.map((line) => <div key={line.lineNo} className="flex items-start justify-between gap-3 py-3 break-inside-avoid"><div className="min-w-0"><p className="font-medium break-words">{line.name}</p>{(line.packCode || lineCode(line)) && <p className="font-mono break-all text-sm text-muted-foreground">{line.packCode || lineCode(line)}</p>}</div><strong className="max-w-[45%] text-right tabular-nums [overflow-wrap:anywhere]">{formatQty(line.qty)} {line.unit}</strong></div>)}
-        </div>
+        {/* ใบจัดสินค้า: เรียงตามรหัสสินค้า (SKU_CODE) ของเดียวกันอยู่ติดกัน คนจัดหยิบได้ง่าย ช่องท้ายไว้เขียนจำนวนที่จัดได้ */}
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-muted-foreground print:text-black">
+              <th className="hidden py-2 pr-2 font-medium sm:table-cell print:table-cell">รหัสสินค้า</th>
+              <th className="py-2 pr-2 font-medium">ชื่อสินค้า</th>
+              <th className="py-2 px-2 font-medium">หน่วย</th>
+              <th className="py-2 px-2 text-right font-medium">จำนวน</th>
+              <th className="py-2 pl-2 text-center font-medium">จำนวนที่จัดได้</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortBySkuCode(order.lines).map((line) => (
+              <tr key={line.lineNo} className="break-inside-avoid border-b border-border align-top">
+                <td className="hidden py-3 pr-2 font-mono text-xs whitespace-nowrap sm:table-cell print:table-cell print:py-1.5">{lineCode(line) || '–'}</td>
+                <td className="py-3 pr-2 print:py-1.5">
+                  <p className="font-medium break-words">{line.name}</p>
+                  {/* มือถือไม่มีคอลัมน์รหัส แสดงรหัสใต้ชื่อแทน บาร์โค้ดที่สั่งช่วยแยกขนาดของสินค้าเดียวกัน */}
+                  <p className="font-mono text-xs break-all text-muted-foreground"><span className="sm:hidden print:hidden">{lineCode(line)}{line.packCode && line.packCode !== lineCode(line) && ' · '}</span>{line.packCode && line.packCode !== lineCode(line) && line.packCode}</p>
+                </td>
+                <td className="py-3 px-2 [overflow-wrap:anywhere] print:py-1.5">{line.unit}</td>
+                <td className="py-3 px-2 text-right font-semibold tabular-nums print:py-1.5">{formatQty(line.qty)}</td>
+                <td className="py-2 pl-2 text-center print:py-1"><span aria-hidden className="inline-block h-9 w-16 rounded-md border-2 border-card-edge bg-background/40 print:h-7 print:border-black print:bg-transparent sm:w-20" /></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
         <p className="text-sm text-muted-foreground">รวม {order.lines.length} รายการ</p>
         {order.reference && <p className="text-sm break-words">อ้างอิง: {order.reference}</p>}
         {order.note && <p className="text-sm whitespace-pre-wrap break-words">หมายเหตุ: {order.note}</p>}
+        {/* ช่องเซ็นชื่อ 3 ฝ่าย ถ้าถูกดันไปหน้าใหม่ยังรู้ว่าเป็นของออเดอร์ไหน */}
+        <div className="grid break-inside-avoid grid-cols-3 gap-x-4 gap-y-6 pt-4 text-center text-sm sm:gap-x-8">
+          <p className="col-span-3 text-left text-xs text-muted-foreground print:text-black">ลงชื่อรับรองออเดอร์ {order.id}</p>
+          {['ผู้จัดสินค้า', 'ผู้ตรวจสอบสินค้า', 'ผู้รับสินค้า'].map((who) => (
+            <div key={who} className="grid min-w-0 gap-1">
+              <span className="border-b border-card-edge pb-8 print:border-black" />
+              <span className="text-xs font-medium break-words sm:text-sm">{who}</span>
+            </div>
+          ))}
+        </div>
         <div className="flex flex-wrap gap-2 print:hidden">{actions}</div>
       </CardContent>
     </Card>

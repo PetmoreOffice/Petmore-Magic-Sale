@@ -1,7 +1,7 @@
-import { FormEvent, ReactNode, SyntheticEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { CSSProperties, FormEvent, ReactNode, SyntheticEvent, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowDownAZIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, HistoryIcon, KeyRoundIcon, LoaderCircleIcon, MinusIcon, RotateCcwIcon, SaveIcon,
-  SearchIcon, UserPlusIcon, XIcon,
+  CheckIcon, ChevronDownIcon, ChevronRightIcon, HistoryIcon, KeyRoundIcon, LoaderCircleIcon, MinusIcon, RotateCcwIcon, SaveIcon,
+  SearchIcon, UserPlusIcon, WarehouseIcon, XIcon,
 } from 'lucide-react';
 import { cn } from 'cn';
 import {
@@ -13,8 +13,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { MagicStage, monogram, Seal, ToneChip, TONES, type Tone } from '@/components/magic';
+import { MagicStage, monogram, Seal, Sparkle, ToneChip, TONES, type Tone } from '@/components/magic';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
 import StarBorder from '@/components/StarBorder';
 import { Field, Message, Notice } from '@/components/wms';
@@ -27,6 +26,7 @@ const ROLE_CODES = Object.keys(ROLES) as RoleCode[];
 /** สีประจำตำแหน่ง: ป้ายบนพื้นปกติใช้ TONES, จุดดาวบนท้องฟ้าใช้สีที่อ่านได้บนพื้นมืด */
 const ROLE_TONE: Record<RoleCode, Tone> = { ADMIN: 'star', CHECKER: 'mint', PICKER: 'kibble' };
 const ROLE_SKY: Record<RoleCode, string> = { ADMIN: 'var(--pm-star)', CHECKER: 'var(--pm-on-sky-mint)', PICKER: 'var(--pm-on-sky-kibble)' };
+const ROLE_INK: Record<RoleCode, string> = { ADMIN: 'text-star-ink', CHECKER: 'text-mint', PICKER: 'text-kibble-ink' };
 
 type Status = 'ALL' | 'ACTIVE' | 'INACTIVE';
 type Sort = 'name' | 'role';
@@ -52,7 +52,7 @@ const scopeText = (u: Pick<ManagedUser, 'warehouseScope'>) =>
   u.warehouseScope.all ? 'ทุกคลัง' : u.warehouseScope.codes.length ? `คลัง ${u.warehouseScope.codes.join(', ')}` : 'ยังไม่มีคลัง';
 
 /**
- * แถบเมนูที่เปิดได้: ไอคอนเมนูชุดเดียวกับหน้าแรก สว่างทอง = เปิดได้ จาง = เปิดไม่ได้
+ * แถบเมนูในหัวแผงแก้ไข: ป้ายมีชื่อทุกเมนู ทอง = เปิดได้ เส้นประจาง = เปิดไม่ได้ เปลี่ยนสิทธิ์แล้วติด/ดับทันที
  * โปรแกรมอ่านหน้าจออ่านเป็นประโยคเดียว ("เปิดได้ 3 จาก 8 เมนู: ...")
  */
 function MenuStrip({ permissions, onSky, className }: { permissions: readonly Permission[]; onSky?: boolean; className?: string }) {
@@ -61,7 +61,7 @@ function MenuStrip({ permissions, onSky, className }: { permissions: readonly Pe
     <span
       role="img"
       aria-label={open.length ? `เปิดได้ ${open.length} จาก ${APP_MENUS.length} เมนู: ${open.map((m) => m.short).join(', ')}` : 'ยังเปิดเมนูใดไม่ได้'}
-      className={cn('inline-flex gap-1', className)}
+      className={cn('flex flex-wrap gap-1.5', className)}
     >
       {APP_MENUS.map((m) => {
         const on = canOpen(m, permissions);
@@ -70,14 +70,14 @@ function MenuStrip({ permissions, onSky, className }: { permissions: readonly Pe
             key={m.to}
             title={`${m.title}${on ? '' : ' (เปิดไม่ได้)'}`}
             className={cn(
-              // เปิดได้ = ไอคอนทองบนพื้นทองอ่อน, เปิดไม่ได้ = ช่องว่างเส้นประ ให้ "ขาด" อ่านออกเป็นรูปทรง ไม่ใช่แค่จางลง
-              'grid size-7 place-items-center rounded-md border transition-colors duration-300',
+              // ป้ายมีชื่อแบบเดียวกับบัตรพนักงาน: เปิดได้ = ทองบนพื้นทองอ่อน, เปิดไม่ได้ = กรอบเส้นประจาง อ่านออกเป็นรูปทรง ไม่ใช่แค่สี
+              'inline-flex h-7 items-center gap-1 rounded-full border pr-2.5 pl-2 text-xs font-medium transition-colors duration-300',
               on
                 ? 'border-transparent bg-star-soft text-star-ink'
-                : onSky ? 'border-dashed border-on-sky/25 text-on-sky/25' : 'border-dashed border-border text-muted-foreground/40',
+                : onSky ? 'border-dashed border-on-sky/30 text-on-sky/45' : 'border-dashed border-border text-muted-foreground/60',
             )}
           >
-            <m.icon className="size-4" />
+            <m.icon className="size-3.5" />{m.short}
           </span>
         );
       })}
@@ -196,6 +196,10 @@ export function UsersPage() {
   }, [users, role, status, sort, term]);
 
   const filtered = role !== 'ALL' || status !== 'ALL' || !!term;
+  // เรียงตามตำแหน่ง: แบ่งบัตรเป็นกลุ่มต่อตำแหน่ง มีหัวกลุ่ม, ตามชื่อ: กลุ่มเดียวทั้งทีม
+  const groups = useMemo(() => sort === 'role'
+    ? ROLE_CODES.map((r) => ({ key: r, role: r as RoleCode | null, users: shown.filter((u) => u.roleCode === r) })).filter((g) => g.users.length)
+    : shown.length ? [{ key: 'all', role: null as RoleCode | null, users: shown }] : [], [shown, sort]);
 
   return (
     <div className="grid gap-4">
@@ -256,119 +260,59 @@ export function UsersPage() {
 
       <Notice message={message} />
 
-      <div className="grid grid-cols-[minmax(0,1fr)_8.5rem] gap-2 sm:grid-cols-[minmax(0,1fr)_14rem] sm:gap-3">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_12rem_auto] sm:gap-3">
         <div className="relative">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input className={cn(touchInput, 'pl-9')} type="search" aria-label="ค้นหาผู้ใช้" placeholder="ค้นชื่อ หรือชื่อผู้ใช้" value={term} onChange={(e) => setTerm(e.target.value)} />
         </div>
-        <NativeSelect size="touch" aria-label="สถานะบัญชี" value={status} onChange={(e) => setStatus(e.target.value as Status)}>
-          <NativeSelectOption value="ALL">ทุกสถานะ</NativeSelectOption>
-          <NativeSelectOption value="ACTIVE">ใช้งานอยู่</NativeSelectOption>
-          <NativeSelectOption value="INACTIVE">ปิดใช้งาน</NativeSelectOption>
-        </NativeSelect>
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:contents">
+          <NativeSelect size="touch" aria-label="สถานะบัญชี" value={status} onChange={(e) => setStatus(e.target.value as Status)}>
+            <NativeSelectOption value="ALL">ทุกสถานะ</NativeSelectOption>
+            <NativeSelectOption value="ACTIVE">ใช้งานอยู่</NativeSelectOption>
+            <NativeSelectOption value="INACTIVE">ปิดใช้งาน</NativeSelectOption>
+          </NativeSelect>
+          {/* เรียงตามตำแหน่ง = แบ่งกลุ่มบัตรตามตำแหน่ง, ตามชื่อ = เรียง ก-ฮ ต่อกันทั้งทีม */}
+          <div role="radiogroup" aria-label="เรียงบัตร" className="inline-flex h-12 items-center rounded-lg border border-input p-1">
+            {([['role', 'ตำแหน่ง'], ['name', 'ชื่อ']] as const).map(([k, label]) => (
+              <button key={k} type="button" role="radio" aria-checked={sort === k} onClick={() => setSort(k)}
+                className={cn('h-full rounded-md px-3 text-sm whitespace-nowrap transition-colors outline-none focus-visible:ring-3 focus-visible:ring-ring/50',
+                  sort === k ? 'bg-star-soft font-semibold text-star-ink' : 'text-muted-foreground hover:text-foreground')}>
+                ตาม{label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* คำอธิบายไอคอน: บนมือถือแตะไอคอนแล้วไม่มี tooltip จึงต้องมีรายการชื่อให้เทียบ */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground" aria-hidden>
-        <span className="font-medium text-foreground">เมนูที่เปิดได้:</span>
-        {APP_MENUS.map((m) => (
-          <span key={m.to} className="inline-flex items-center gap-1"><m.icon className="size-3.5" />{m.short}</span>
-        ))}
-      </div>
-
-      <section aria-label="รายชื่อผู้ใช้" aria-busy={!users} className="overflow-hidden rounded-xl border border-border bg-card">
+      <section aria-label="บัตรพนักงาน" aria-busy={!users} className="grid gap-7">
         {!users && !message && (
-          <p className="flex items-center gap-2 p-4 text-sm text-muted-foreground" role="status">
+          <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
             <LoaderCircleIcon className="size-4 animate-spin" aria-hidden />กำลังโหลดผู้ใช้…
           </p>
         )}
         {users && !shown.length && (
-          <div className="grid justify-items-start gap-3 p-4">
+          <div className="grid justify-items-start gap-3 rounded-2xl border border-dashed border-card-edge p-5">
             <p className="text-sm text-muted-foreground">{filtered ? 'ไม่พบผู้ใช้ที่ตรงกับตัวกรอง' : 'ยังไม่มีผู้ใช้'}</p>
             {filtered && <Button variant="outline" size="touch" onClick={() => { setRole('ALL'); setStatus('ALL'); setTerm(''); }}>ล้างตัวกรอง</Button>}
           </div>
         )}
-
-        {shown.length > 0 && (
-          <>
-            {/* จอกว้าง: ตารางแน่น แตะได้ทั้งแถว (ปุ่มชื่อขยายพื้นที่กดคลุมแถว) */}
-            <Table className="hidden md:table">
-              <TableHeader>
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="h-12 pl-4">
-                    <button type="button" onClick={() => setSort('name')} aria-pressed={sort === 'name'}
-                      className={cn('-ml-2 inline-flex min-h-12 items-center gap-1 rounded-md px-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50', sort === 'name' && 'text-foreground')}>
-                      ผู้ใช้{sort === 'name' && <ArrowDownAZIcon className="size-4" aria-label="เรียงตามชื่อ" />}
-                    </button>
-                  </TableHead>
-                  <TableHead>
-                    <button type="button" onClick={() => setSort('role')} aria-pressed={sort === 'role'}
-                      className={cn('-ml-2 inline-flex min-h-12 items-center gap-1 rounded-md px-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50', sort === 'role' && 'text-foreground')}>
-                      ตำแหน่ง{sort === 'role' && <ArrowDownAZIcon className="size-4" aria-label="เรียงตามตำแหน่ง" />}
-                    </button>
-                  </TableHead>
-                  <TableHead>เมนูที่เปิดได้</TableHead>
-                  <TableHead className="pr-4">คลัง</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {shown.map((u) => (
-                  <TableRow key={u.id} className={cn('relative', canManage && 'cursor-pointer', !u.active && 'text-muted-foreground')}>
-                    <TableCell className="py-2 pl-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar user={u} />
-                        <div className="grid min-w-0">
-                          {canManage ? (
-                            <button type="button" onClick={() => open(draftOf(u))}
-                              className="truncate text-left font-semibold outline-none after:absolute after:inset-0 after:rounded-sm focus-visible:after:ring-3 focus-visible:after:ring-ring/50 focus-visible:after:ring-inset">
-                              {u.displayName}
-                            </button>
-                          ) : <span className="truncate font-semibold">{u.displayName}</span>}
-                          {!u.active && <Seal tone="rose" state="broken" className="relative justify-self-start">ปิดใช้งาน</Seal>}
-                          <span className="truncate text-xs text-muted-foreground">{u.username}{u.username === me?.username && ' · คุณ'}</span>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell><ToneChip tone={ROLE_TONE[u.roleCode] ?? 'plum'}>{ROLES[u.roleCode] ?? u.roleCode}</ToneChip></TableCell>
-                    <TableCell><MenuStrip permissions={u.permissions} className={cn(!u.active && 'opacity-50')} /></TableCell>
-                    <TableCell className="max-w-48 truncate pr-4 text-sm">{scopeText(u)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-
-            {/* จอแคบ: รายการ แถบเมนูอยู่ใต้ชื่อ */}
-            <ul className="divide-y divide-border md:hidden">
-              {shown.map((u) => {
-                const body = (
-                  <>
-                    <Avatar user={u} />
-                    <span className="grid min-w-0 flex-1 gap-1.5">
-                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="font-semibold">{u.displayName}</span>
-                        <ToneChip tone={ROLE_TONE[u.roleCode] ?? 'plum'}>{ROLES[u.roleCode] ?? u.roleCode}</ToneChip>
-                        {!u.active && <Seal tone="rose" state="broken">ปิดใช้งาน</Seal>}
-                      </span>
-                      <span className="truncate text-xs text-muted-foreground">{u.username}{u.username === me?.username && ' · คุณ'} · {scopeText(u)}</span>
-                      <MenuStrip permissions={u.permissions} className={cn(!u.active && 'opacity-50')} />
-                    </span>
-                  </>
-                );
-                return (
-                  <li key={u.id}>
-                    {canManage ? (
-                      <button type="button" onClick={() => open(draftOf(u))} aria-label={`แก้ไข ${u.displayName}`}
-                        className="flex w-full items-center gap-3 px-3 py-3 text-left outline-none hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset">
-                        {body}
-                        <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" aria-hidden />
-                      </button>
-                    ) : <div className="flex items-center gap-3 px-3 py-3">{body}</div>}
-                  </li>
-                );
-              })}
+        {groups.map((g) => (
+          <div key={g.key} className="grid gap-3">
+            {g.role && (
+              <h3 className="flex items-center gap-2 font-heading text-lg font-semibold">
+                <Sparkle className={cn('size-4', ROLE_INK[g.role])} />{ROLES[g.role]}
+                <span className="text-sm font-normal text-muted-foreground tabular-nums">{g.users.length} คน</span>
+              </h3>
+            )}
+            <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {g.users.map((u) => (
+                <li key={u.id} className="min-w-0">
+                  <StaffCard user={u} isSelf={u.username === me?.username} grouped={!!g.role} onEdit={canManage ? () => open(draftOf(u)) : undefined} />
+                </li>
+              ))}
             </ul>
-          </>
-        )}
+          </div>
+        ))}
       </section>
 
       {has('users.audit') && <AuditHistory />}
@@ -401,12 +345,79 @@ export function UsersPage() {
   );
 }
 
-function Avatar({ user }: { user: ManagedUser }) {
-  return (
-    <span aria-hidden className={cn('grid size-10 shrink-0 place-items-center rounded-full font-heading text-base font-semibold', TONES[ROLE_TONE[user.roleCode] ?? 'plum'], !user.active && 'opacity-50')}>
-      {monogram(user.displayName)}
-    </span>
+/** รอยเว้าครึ่งวงกลมที่ปลายรอยปรุของบัตร: ตัวบัตร (บน) กับต้นขั้ว (ล่าง) มี mask ของตัวเองคนละครึ่ง แบบเดียวกับบัตรหน้าเข้าสู่ระบบ */
+const NOTCH = 11;
+const notchAt = (y: '0' | '100%'): CSSProperties => {
+  const mask = `radial-gradient(circle ${NOTCH}px at 0 ${y}, transparent 98%, #000), radial-gradient(circle ${NOTCH}px at 100% ${y}, transparent 98%, #000)`;
+  return { maskImage: mask, WebkitMaskImage: mask, maskComposite: 'intersect', WebkitMaskComposite: 'source-in' };
+};
+
+/**
+ * บัตรพนักงานเวทมนตร์ 1 คน: ตัวบัตรมีแถบสีประจำตำแหน่ง ชื่อ ชื่อผู้ใช้ สถานะ, ต้นขั้วใต้รอยปรุบอกเมนูที่เปิดได้เป็นป้ายมีชื่อ และคลัง
+ * ทั้งใบกดเปิดแผงแก้ไข (ถ้ามีสิทธิ์จัดการ) ชี้/แตะ/โฟกัสแล้วขอบทอง
+ */
+function StaffCard({ user: u, isSelf, grouped, onEdit }: { user: ManagedUser; isSelf: boolean; grouped?: boolean; onEdit?: () => void }) {
+  const tone = ROLE_TONE[u.roleCode] ?? 'plum';
+  const menus = APP_MENUS.filter((m) => canOpen(m, u.permissions));
+  const edge = 'border-card-edge transition-colors duration-200 group-hover:border-star/70 group-active:border-star group-focus-visible:border-star';
+  const body = (
+    <>
+      <div style={notchAt('100%')} className={cn('overflow-hidden rounded-t-2xl border border-b-0 bg-card', edge)}>
+        {/* แถบประจำตำแหน่ง: สีเดียวกับกลุ่มดาวบนเวที อ่านตำแหน่งได้ก่อนชื่อ */}
+        <div className={cn('flex min-h-10 items-center justify-between gap-2 px-4 py-1.5', TONES[tone])}>
+          <span className="inline-flex items-center gap-1.5 text-sm font-semibold"><Sparkle className="size-3.5" />{!grouped && (ROLES[u.roleCode] ?? u.roleCode)}</span>
+          {u.active
+            ? <span className="inline-flex items-center gap-1.5 text-xs font-medium"><span aria-hidden className="size-1.5 rounded-full bg-current" />ใช้งานอยู่</span>
+            : <Seal tone="rose" state="broken" className="h-6">ปิดใช้งาน</Seal>}
+        </div>
+        <div className="flex items-center gap-3 px-4 pt-4 pb-5">
+          <span aria-hidden className={cn('grid size-14 shrink-0 place-items-center rounded-full font-heading text-xl font-semibold ring-2 ring-offset-2 ring-offset-card', TONES[tone], u.active ? 'ring-current/35' : 'opacity-50 ring-border grayscale')}>
+            {monogram(u.displayName)}
+          </span>
+          <span className="grid min-w-0 gap-0.5">
+            <span className={cn('font-heading text-lg leading-snug font-semibold break-words', !u.active && 'text-muted-foreground')}>{u.displayName}</span>
+            <span className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
+              <span className="break-all">{u.username}</span>
+              {isSelf && <span className="rounded-full bg-star-soft px-2 text-xs font-semibold text-star-ink">คุณ</span>}
+            </span>
+          </span>
+        </div>
+      </div>
+      {/* ต้นขั้ว: รอยปรุเส้นประทองคั่น เมนูที่เปิดได้เป็นป้ายมีชื่อ อ่านได้ไม่ต้องเดาไอคอน */}
+      <div style={notchAt('0')} className={cn('relative grid flex-1 content-start gap-3 rounded-b-2xl border border-t-0 bg-secondary/60 px-4 pt-4 pb-3', edge)}>
+        <span aria-hidden className="pointer-events-none absolute inset-x-[15px] top-0 border-t-2 border-dashed border-star-ink/35 dark:border-star/40" />
+        <span className="flex items-baseline justify-between gap-2 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">เมนูที่เปิดได้</span>
+          <span className="tabular-nums">{menus.length} จาก {APP_MENUS.length}</span>
+        </span>
+        {menus.length ? (
+          <span className={cn('flex flex-wrap gap-1.5', !u.active && 'opacity-60')}>
+            {menus.map((m) => (
+              <span key={m.to} className="inline-flex h-7 items-center gap-1 rounded-full bg-star-soft pr-2.5 pl-2 text-xs font-medium text-star-ink">
+                <m.icon className="size-3.5" aria-hidden />{m.short}
+              </span>
+            ))}
+          </span>
+        ) : (
+          <span className="rounded-lg border border-dashed border-card-edge px-3 py-2 text-xs text-muted-foreground">ยังเปิดเมนูใดไม่ได้</span>
+        )}
+        <span className="mt-auto flex items-center justify-between gap-2 border-t border-border/70 pt-3 text-sm">
+          <span className="inline-flex min-w-0 items-center gap-1.5 text-muted-foreground">
+            <WarehouseIcon className="size-4 shrink-0" aria-hidden /><span className="truncate">{scopeText(u)}</span>
+          </span>
+          {onEdit && <span className="inline-flex shrink-0 items-center gap-0.5 font-medium text-star-ink transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transform-none">แก้ไข<ChevronRightIcon className="size-4" aria-hidden /></span>}
+        </span>
+      </div>
+    </>
   );
+  // เงาตามรูปบัตร (drop-shadow ตาม mask รอยเว้า) ยกขึ้นเล็กน้อยเมื่อชี้
+  const shell = 'group relative flex h-full w-full flex-col text-left drop-shadow-[0_6px_12px_color-mix(in_oklab,var(--pm-shadow)_14%,transparent)] transition-[translate,filter] duration-200 hover:-translate-y-0.5 hover:drop-shadow-[0_10px_18px_color-mix(in_oklab,var(--pm-shadow)_22%,transparent)] motion-reduce:hover:translate-y-0';
+  return onEdit ? (
+    <button type="button" onClick={onEdit} aria-label={`แก้ไขบัตรของ ${u.displayName} (${ROLES[u.roleCode] ?? u.roleCode}${u.active ? '' : ', ปิดใช้งาน'}) ${menus.length ? `เปิดได้ ${menus.length} เมนู: ${menus.map((m) => m.short).join(', ')}` : 'ยังเปิดเมนูใดไม่ได้'}`}
+      className={cn(shell, 'rounded-2xl outline-none focus-visible:ring-3 focus-visible:ring-star/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background')}>
+      {body}
+    </button>
+  ) : <div className={shell}>{body}</div>;
 }
 
 function UserEditor({ initial, isSelf, warehouses, onCancel, onSaved }: {

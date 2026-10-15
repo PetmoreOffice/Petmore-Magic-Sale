@@ -15,6 +15,7 @@ import { ScanFeedback, ScanInput, ScanInputHandle } from '@/components/ScanInput
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
 import { CheckBadge, Field, Message, Notice } from '@/components/wms';
 import { OrderBarcode } from '@/components/OrderBarcode';
+import { lineCode, sortBySkuCode } from '@/lib/doc-lines';
 import { MagicStage, Medallion, ToneChip, TONES, type Tone, SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import BlurText from '@/components/BlurText';
 import SpotlightCard from '@/components/SpotlightCard';
@@ -649,7 +650,7 @@ function ManualItem({ onAdd }: { onAdd: (item: { itemCode: string; name: string;
 /**
  * ใบคืนที่บันทึกแล้ว: ฉากสำเร็จบนท้องฟ้า (เฉพาะตอนเพิ่งบันทึก) + เอกสารแบบเดียวกับใบออเดอร์
  * บาร์โค้ดเลขใบคืน (สแกนในหน้านี้เปิดใบคืนได้), ผู้สั่ง/สาเหตุ/ผู้คืน, รายการแยกของดี/เสียหาย
- * พิมพ์เป็นขาวดำ มีช่องเซ็นชื่อผู้คืนและผู้รับคืนเฉพาะบนกระดาษ
+ * พิมพ์เป็นขาวดำ ตารางแบบใบจัดสินค้า (เรียงตาม SKU_CODE + ช่องจำนวนที่รับคืน) ช่องเซ็น ผู้คืน/ผู้ตรวจสอบ/ผู้รับคืน
  */
 function ReturnReceipt({ ret, celebrate, actions }: { ret: ProductReturn; celebrate: boolean; actions: ReactNode }) {
   const spark = useRef<SparkBurstHandle>(null);
@@ -693,20 +694,31 @@ function ReturnReceipt({ ret, celebrate, actions }: { ret: ProductReturn; celebr
             <div><dt className="text-muted-foreground">สาเหตุที่คืน</dt><dd>{RETURN_REASONS[ret.reason]}</dd></div>
             <div><dt className="text-muted-foreground">ผู้คืนสินค้า</dt><dd className="break-words">{ret.returnerName || 'ไม่ได้ระบุ'}</dd></div>
           </dl>
+          {/* แบบเดียวกับใบจัดสินค้า: เรียงตาม SKU_CODE ช่องท้ายไว้เขียนจำนวนที่ตรวจรับคืนจริง */}
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border text-left text-muted-foreground">
-                <th className="py-2 font-medium">สินค้า</th>
-                <th className="py-2 pl-2 text-right font-medium whitespace-nowrap">ของดี (FG)</th>
-                <th className="py-2 pl-2 text-right font-medium whitespace-nowrap">เสียหาย (DM)</th>
+              <tr className="border-b border-border text-left text-muted-foreground print:text-black">
+                <th className="hidden py-2 pr-2 font-medium sm:table-cell print:table-cell">รหัสสินค้า</th>
+                <th className="py-2 pr-2 font-medium">ชื่อสินค้า</th>
+                <th className="py-2 px-2 font-medium">หน่วย</th>
+                <th className="py-2 px-2 text-right font-medium whitespace-nowrap"><span className="sm:hidden print:hidden">FG</span><span className="hidden sm:inline print:inline">ของดี (FG)</span></th>
+                <th className="py-2 px-2 text-right font-medium whitespace-nowrap"><span className="sm:hidden print:hidden">DM</span><span className="hidden sm:inline print:inline">เสียหาย (DM)</span></th>
+                <th className="hidden py-2 pl-2 text-center font-medium sm:table-cell print:table-cell">จำนวนที่รับคืน</th>
               </tr>
             </thead>
             <tbody>
-              {ret.lines.map((l) => (
+              {sortBySkuCode(ret.lines).map((l) => (
                 <tr key={l.lineNo} className="break-inside-avoid border-b border-border align-top">
-                  <td className="py-3 pr-2"><p className="font-medium break-words">{l.name}</p><p className="font-mono text-xs break-all text-muted-foreground">{l.packCode || l.sku || l.itemCode}</p></td>
-                  <td className="py-3 pl-2 text-right font-semibold tabular-nums text-mint print:text-black">{l.goodQty ? <>{formatQty(l.goodQty)} <span className="font-normal">{l.unit}</span></> : '–'}</td>
-                  <td className="py-3 pl-2 text-right font-semibold tabular-nums text-rose print:text-black">{l.damagedQty ? <>{formatQty(l.damagedQty)} <span className="font-normal">{l.unit}</span></> : '–'}</td>
+                  <td className="hidden py-3 pr-2 font-mono text-xs whitespace-nowrap sm:table-cell print:table-cell print:py-1.5">{lineCode(l) || '–'}</td>
+                  <td className="py-3 pr-2 print:py-1.5">
+                    <p className="font-medium break-words">{l.name}</p>
+                    {/* มือถือไม่มีคอลัมน์รหัส แสดงรหัสใต้ชื่อแทน บาร์โค้ดที่คืนช่วยแยกขนาดของสินค้าเดียวกัน */}
+                    <p className="font-mono text-xs break-all text-muted-foreground"><span className="sm:hidden print:hidden">{lineCode(l)}{l.packCode && l.packCode !== lineCode(l) && ' · '}</span>{l.packCode && l.packCode !== lineCode(l) && l.packCode}</p>
+                  </td>
+                  <td className="py-3 px-2 [overflow-wrap:anywhere] print:py-1.5">{l.unit}</td>
+                  <td className="py-3 px-2 text-right font-semibold tabular-nums text-mint print:py-1.5 print:text-black">{l.goodQty ? formatQty(l.goodQty) : '–'}</td>
+                  <td className="py-3 px-2 text-right font-semibold tabular-nums text-rose print:py-1.5 print:text-black">{l.damagedQty ? formatQty(l.damagedQty) : '–'}</td>
+                  <td className="hidden py-2 pl-2 text-center sm:table-cell print:table-cell print:py-1"><span aria-hidden className="inline-block h-9 w-16 rounded-md border-2 border-card-edge bg-background/40 print:h-7 print:border-black print:bg-transparent sm:w-20" /></td>
                 </tr>
               ))}
             </tbody>
@@ -714,14 +726,13 @@ function ReturnReceipt({ ret, celebrate, actions }: { ret: ProductReturn; celebr
           <p className="text-sm text-muted-foreground">รวม {ret.lines.length} รายการ</p>
           {ret.note && <p className="text-sm whitespace-pre-wrap break-words">หมายเหตุ: {ret.note}</p>}
           <p className="text-sm text-muted-foreground">ใบคืนนี้บันทึกเป็นประวัติเท่านั้น ยอดสต็อกในคลังยังไม่เปลี่ยน</p>
-          {/* ช่องเซ็นชื่อ มีเฉพาะบนกระดาษ ถ้าถูกดันไปหน้าใหม่ยังรู้ว่าเป็นของใบคืนไหน */}
-          <div className="hidden break-inside-avoid grid-cols-2 gap-x-10 gap-y-8 pt-6 text-center text-sm print:grid">
-            <p className="col-span-2 text-left text-xs">ลงชื่อรับรองใบคืน {ret.id}{ret.orderId && ` (ออเดอร์ ${ret.orderId})`}</p>
-            {['ผู้คืนสินค้า', 'ผู้รับคืน'].map((who) => (
-              <div key={who} className="grid gap-1">
-                <span className="border-b border-black pb-6" />
-                <span>{who}</span>
-                <span className="text-xs">วันที่ ____ / ____ / ______</span>
+          {/* ช่องเซ็นชื่อ 3 ฝ่าย ถ้าถูกดันไปหน้าใหม่ยังรู้ว่าเป็นของใบคืนไหน */}
+          <div className="grid break-inside-avoid grid-cols-3 gap-x-4 gap-y-6 pt-4 text-center text-sm sm:gap-x-8">
+            <p className="col-span-3 text-left text-xs text-muted-foreground print:text-black">ลงชื่อรับรองใบคืน {ret.id}{ret.orderId && ` (ออเดอร์ ${ret.orderId})`}</p>
+            {['ผู้คืนสินค้า', 'ผู้ตรวจสอบสินค้า', 'ผู้รับคืนสินค้า'].map((who) => (
+              <div key={who} className="grid min-w-0 gap-1">
+                <span className="border-b border-card-edge pb-8 print:border-black" />
+                <span className="text-xs font-medium break-words sm:text-sm">{who}</span>
               </div>
             ))}
           </div>
