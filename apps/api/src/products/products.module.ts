@@ -21,6 +21,9 @@ import { PrismaService, Tx } from '../prisma/prisma.service';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { audit, optionalText, requireRequestId, requireText } from '../common/util';
 
+/** ค้นสินค้า: บาร์โค้ดที่ตรงไม่เกินเท่านี้ SKU ใช้ทางเร็ว (trigram + IN) เกินนี้ใช้เงื่อนไขเดิม */
+const PACK_HIT_LIMIT = 5000;
+
 /** ขนาดบรรจุแบบเดียวของสินค้าที่ไม่มีข้อมูลจาก GOODSMASTER (สร้างใน WMS): 1 หน่วยนับสต็อก */
 export function basePack(p: ProductRow): ProductPack {
   return { code: p.sku, name: p.name, unitName: p.unit, unitQty: Number(p.unitQty), factor: 1, active: true };
@@ -181,10 +184,19 @@ export class ProductsService {
       // บาร์โค้ดที่สแกนมาตรงตัว (มีช่องว่างกลางได้) หรือทุกคำที่พิมพ์ต้องเจอใน searchKey (SKU+ชื่อ+ยี่ห้อ ไม่สนเว้นวรรค)
       // "torofreeze" เจอ "Toro Freeze Dried", "กระเป๋า ชมพู" เจอทั้งสองคำแม้อยู่ห่างกัน
       const words = term.split(/\s+/).map(searchKey).filter(Boolean).slice(0, 6);
+      // หา SKU จากบาร์โค้ดก่อนด้วย trigram index (เขียน OR กับ EXISTS ตรงๆ ฐานข้อมูลต้องไล่ทุกสินค้า ~150ms ต่อครั้ง ช้าลงมากตอนคนใช้พร้อมกัน)
+      const like = `%${term.replace(/[\\%_]/g, '\\$&')}%`;
+      const packSkus = (await this.prisma.$queryRaw<{ sku: string }[]>`
+        SELECT DISTINCT "sku" FROM "ProductPack" WHERE "active" AND "code" LIKE ${like} LIMIT ${PACK_HIT_LIMIT + 1}`).map((r) => r.sku);
+      // เลขสั้นที่ตรงกับบาร์โค้ดหลายพันตัว (เช่น "885") ใช้เงื่อนไขเดิม ผลครบเสมอ แค่ช้ากว่า
+      const byPack: Prisma.ProductWhereInput = packSkus.length > PACK_HIT_LIMIT
+        ? { packs: { some: { active: true, code: { contains: term } } } }
+        : { sku: { in: packSkus } };
       where.OR = [
-        { packs: { some: { active: true, code: { contains: term } } } },
+        ...(packSkus.length ? [byPack] : []),
         ...(words.length ? [{ AND: words.map((w) => ({ searchKey: { contains: w } })) }] : []),
       ];
+      if (!where.OR.length) where.OR = [{ sku: '' }];
     }
     const [total, rows] = await this.prisma.$transaction([
       this.prisma.product.count({ where }),

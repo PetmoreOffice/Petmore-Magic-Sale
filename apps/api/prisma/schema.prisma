@@ -136,6 +136,8 @@ model Product {
   packs           ProductPack[]
 
   @@index([barcode])
+  /// ค้น "มีคำนี้ตรงไหนก็ได้" ด้วย trigram (migration 20261015090000_search_trgm สร้าง extension pg_trgm)
+  @@index([searchKey(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([customerCode])
 }
 
@@ -156,6 +158,7 @@ model ProductPack {
   companySyncedAt DateTime?
 
   @@index([sku])
+  @@index([code(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
 /// ผู้สั่ง: บริษัทคู่ค้าจาก dbo.ICCAT ของ SQL Server บริษัท (sync อ่านอย่างเดียว ไม่รวม key 0 "ไม่กำหนดประเภท")
