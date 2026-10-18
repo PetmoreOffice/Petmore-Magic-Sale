@@ -24,9 +24,9 @@ import { useAuth } from '../auth';
 
 const ROLE_CODES = Object.keys(ROLES) as RoleCode[];
 /** สีประจำตำแหน่ง: ป้ายบนพื้นปกติใช้ TONES, จุดดาวบนท้องฟ้าใช้สีที่อ่านได้บนพื้นมืด */
-const ROLE_TONE: Record<RoleCode, Tone> = { ADMIN: 'star', CHECKER: 'mint', PACKER: 'sky', INSPECTOR: 'plum', PICKER: 'kibble' };
-const ROLE_SKY: Record<RoleCode, string> = { ADMIN: 'var(--pm-star)', CHECKER: 'var(--pm-on-sky-mint)', PACKER: 'var(--pm-on-sky-sky)', INSPECTOR: 'var(--pm-on-sky-plum)', PICKER: 'var(--pm-on-sky-kibble)' };
-const ROLE_INK: Record<RoleCode, string> = { ADMIN: 'text-star-ink', CHECKER: 'text-mint', PACKER: 'text-sky', INSPECTOR: 'text-plum', PICKER: 'text-kibble-ink' };
+const ROLE_TONE: Record<RoleCode, Tone> = { ADMIN: 'star', CHECKER: 'mint', PACKER: 'sky', PICKER: 'kibble' };
+const ROLE_SKY: Record<RoleCode, string> = { ADMIN: 'var(--pm-star)', CHECKER: 'var(--pm-on-sky-mint)', PACKER: 'var(--pm-on-sky-sky)', PICKER: 'var(--pm-on-sky-kibble)' };
+const ROLE_INK: Record<RoleCode, string> = { ADMIN: 'text-star-ink', CHECKER: 'text-mint', PACKER: 'text-sky', PICKER: 'text-kibble-ink' };
 
 type Status = 'ALL' | 'ACTIVE' | 'INACTIVE';
 type Sort = 'name' | 'role';
@@ -95,8 +95,6 @@ const SHAPES: Record<RoleCode, [number, number][]> = {
   PICKER: [[20, 16], [40, 8], [60, 14], [80, 8], [100, 16], [96, 44], [60, 48], [24, 44]],
   // คนจัดสินค้า = ลังสินค้า (สี่เหลี่ยม + ฝาลัง)
   PACKER: [[24, 18], [60, 10], [96, 18], [96, 44], [60, 50], [24, 44], [24, 18]],
-  // คนตรวจสินค้า = เครื่องหมายถูก (ติ๊กตรวจผ่าน)
-  INSPECTOR: [[18, 28], [34, 40], [46, 48], [62, 34], [80, 20], [100, 8]],
 };
 
 function Constellation({ role, count, color, dim }: { role: RoleCode; count: number; color: string; dim?: boolean }) {
@@ -178,7 +176,7 @@ export function UsersPage() {
   }
 
   const stats = useMemo(() => {
-    const byRole: Record<RoleCode, number> = { ADMIN: 0, CHECKER: 0, PACKER: 0, INSPECTOR: 0, PICKER: 0 };
+    const byRole: Record<RoleCode, number> = { ADMIN: 0, CHECKER: 0, PACKER: 0, PICKER: 0 };
     let inactive = 0;
     for (const u of users ?? []) {
       if (u.roleCode in byRole) byRole[u.roleCode]++;
@@ -230,7 +228,7 @@ export function UsersPage() {
 
         {/* กลุ่มดาวตามตำแหน่ง = ปุ่มกรอง แตะซ้ำเพื่อเลิกกรอง ดาวของตำแหน่งที่ไม่ได้เลือกจางลง */}
         <div className="grid gap-2">
-          <div role="group" aria-label="กรองตามตำแหน่ง" className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+          <div role="group" aria-label="กรองตามตำแหน่ง" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {ROLE_CODES.map((r) => {
               const selected = role === r;
               return (
@@ -244,7 +242,7 @@ export function UsersPage() {
                     selected ? 'bg-star/15 ring-star' : 'bg-on-sky/5 ring-on-sky/15 hover:bg-on-sky/10',
                   )}
                 >
-                  <span className="grid gap-0.5">
+                  <span className="grid gap-0.5 sm:flex sm:items-baseline sm:justify-between sm:gap-2">
                     <span className="text-xs font-semibold sm:text-sm">{ROLES[r]}</span>
                     <span className="font-heading text-xl leading-none font-semibold tabular-nums sm:text-2xl">{stats.byRole[r]}</span>
                   </span>
