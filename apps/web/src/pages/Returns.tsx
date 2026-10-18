@@ -13,7 +13,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { ScanFeedback, ScanInput, ScanInputHandle } from '@/components/ScanInput';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
-import { CheckBadge, Field, Message, Notice } from '@/components/wms';
+import { BoothName, CheckBadge, Field, KeepIds, Message, Notice } from '@/components/wms';
 import { OrderBarcode } from '@/components/OrderBarcode';
 import { lineCode, sortBySkuCode } from '@/lib/doc-lines';
 import { MagicStage, Medallion, ToneChip, TONES, type Tone, SlotSparkles, SPELL_SLOT } from '@/components/magic';
@@ -354,7 +354,7 @@ export function ReturnsPage() {
                         <button type="button" onClick={() => void openOrder(o)} className="relative flex min-h-20 w-full items-center gap-3 p-3 text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:ring-inset">
                           <Medallion tone="kibble" icon={ClipboardListIcon} />
                           <span className="grid min-w-0 flex-1 gap-1">
-                            <strong className="line-clamp-1 font-medium">{o.customerName}</strong>
+                            <strong className="line-clamp-2 font-medium break-words"><BoothName code={o.customerCode} name={o.customerName} /></strong>
                             <span className="text-sm text-muted-foreground">{o.id} · {o.date} · {o.lines.length} รายการ</span>
                             <span><CheckBadge check={o.lastCheck} /></span>
                           </span>
@@ -466,7 +466,7 @@ export function ReturnsPage() {
                   <p className="font-mono text-sm text-brand-foreground/75">{mode === 'order' ? order?.id : 'ใบคืนอิสระ'}</p>
                   <Button variant="ghost" size="touch" className="px-3 text-brand-foreground hover:bg-on-sky/10 hover:text-brand-foreground" disabled={saving} onClick={goHome}><ArrowLeftIcon />{mode === 'order' ? 'เปลี่ยนออเดอร์' : 'กลับหน้าคืนสินค้า'}</Button>
                 </div>
-                <p className="font-heading text-lg leading-snug font-semibold break-words">{mode === 'order' ? order?.customerName : 'คืนของที่ไม่ได้ผูกกับออเดอร์'}</p>
+                <p className="font-heading text-lg leading-snug font-semibold break-words">{mode === 'order' ? order && <BoothName code={order.customerCode} name={order.customerName} /> : 'คืนของที่ไม่ได้ผูกกับออเดอร์'}</p>
                 {mode === 'order' && summary && !summary.checked && <p className="text-sm text-brand-foreground/75">ออเดอร์นี้ยังไม่ได้ตรวจของเบิก ยอดเบิกจึงใช้ตามที่สั่งในออเดอร์</p>}
               </div>
               <p className="font-heading text-3xl font-semibold tabular-nums" aria-live="polite">
@@ -669,7 +669,7 @@ function ReturnReceipt({ ret, celebrate, actions }: { ret: ProductReturn; celebr
           <MagicStage>
             <div className="grid justify-items-center gap-3 py-4 text-center">
               <span className="grid size-16 place-items-center rounded-full bg-mint-soft text-mint ring-4 ring-mint/25"><Undo2Icon className="size-8" aria-hidden /></span>
-              {reduce ? <p className="font-heading text-2xl font-semibold">{title}</p> : <BlurText text={title} delay={120} animateBy="words" direction="top" className="justify-center font-heading text-2xl font-semibold" />}
+              {reduce ? <p className="font-heading text-2xl font-semibold"><KeepIds text={title} /></p> : <BlurText text={title} delay={120} animateBy="words" direction="top" className="justify-center font-heading text-2xl font-semibold" />}
               <p className="text-brand-foreground/80">{RETURN_REASONS[ret.reason]} · {ret.lines.length} รายการ</p>
             </div>
           </MagicStage>
@@ -709,11 +709,11 @@ function ReturnReceipt({ ret, celebrate, actions }: { ret: ProductReturn; celebr
             <tbody>
               {sortBySkuCode(ret.lines).map((l) => (
                 <tr key={l.lineNo} className="break-inside-avoid border-b border-border align-top">
-                  <td className="hidden py-3 pr-2 font-mono text-xs whitespace-nowrap sm:table-cell print:table-cell print:py-1.5">{lineCode(l) || '–'}</td>
+                  <td className="hidden py-3 pr-2 font-mono text-xs whitespace-nowrap sm:table-cell print:table-cell print:py-1.5">{l.packCode || lineCode(l) || '–'}</td>
                   <td className="py-3 pr-2 print:py-1.5">
                     <p className="font-medium break-words">{l.name}</p>
-                    {/* มือถือไม่มีคอลัมน์รหัส แสดงรหัสใต้ชื่อแทน บาร์โค้ดที่คืนช่วยแยกขนาดของสินค้าเดียวกัน */}
-                    <p className="font-mono text-xs break-all text-muted-foreground"><span className="sm:hidden print:hidden">{lineCode(l)}{l.packCode && l.packCode !== lineCode(l) && ' · '}</span>{l.packCode && l.packCode !== lineCode(l) && l.packCode}</p>
+                    {/* คอลัมน์รหัส = บาร์โค้ดที่คืน (แยกขนาดของสินค้าเดียวกันได้) ลำดับยังเรียงตาม SKU_CODE มือถือไม่มีคอลัมน์นี้ จึงแสดงใต้ชื่อแทน */}
+                  <p className="font-mono text-xs break-all text-muted-foreground sm:hidden print:hidden">{l.packCode || lineCode(l)}</p>
                   </td>
                   <td className="py-3 px-2 [overflow-wrap:anywhere] print:py-1.5">{l.unit}</td>
                   <td className="py-3 px-2 text-right font-semibold tabular-nums text-mint print:py-1.5 print:text-black">{l.goodQty ? formatQty(l.goodQty) : '–'}</td>

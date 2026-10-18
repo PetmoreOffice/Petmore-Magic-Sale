@@ -1,7 +1,7 @@
 import { ReactNode, RefObject } from 'react';
 import { AlertCircleIcon, CheckCircle2Icon, MinusIcon, PlusIcon } from 'lucide-react';
 import { cn } from 'cn';
-import type { PackSize, PickCheckStatus, StockStatus } from '@petmore/shared';
+import { boothOf, type OrderPrep, type PackSize, type PickCheckStatus, type StockStatus } from '@petmore/shared';
 import { breakdown, formatQty } from '@/lib/packs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Seal, SlotSparkles, SPELL_SLOT } from '@/components/magic';
@@ -13,6 +13,17 @@ import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
 // ชิ้นส่วนหน้าจองานคลังที่ใช้ร่วมกันหลายหน้า (รับสินค้า ย้าย Location ดูสต็อก)
 
 export type Message = { text: string; kind: 'error' | 'info' };
+
+/** ชื่อผู้สั่งพร้อมเลขบูธในงาน ("บูธ 4 · บริษัท ...") คนหน้างานเรียกออเดอร์กันด้วยเลขบูธ ใช้ทุกหน้าที่แสดงออเดอร์ */
+export function BoothName({ code, name }: { code: string; name: string }) {
+  const booth = boothOf(code);
+  return <>{booth ? `บูธ ${booth} · ` : ''}{name}</>;
+}
+
+/** ข้อความที่มีเลขเอกสาร (SO-2026-000002, RT-…) ห้ามตัดบรรทัดตรงขีดกลางเลข */
+export function KeepIds({ text }: { text: string }) {
+  return <>{text.split(/([A-Z]{2}-\d{4}-\d{6})/).map((part, i) => (i % 2 ? <span key={i} className="whitespace-nowrap">{part}</span> : part))}</>;
+}
 
 export function Field({ id, label, children, className }: { id: string; label: string; children: ReactNode; className?: string }) {
   return (
@@ -155,4 +166,11 @@ export function CheckBadge({ check, className }: { check: { status: PickCheckSta
   if (check.status === 'MATCH') return <Seal tone="mint" className={className}>ตรวจแล้ว ครบ</Seal>;
   if (check.status === 'PARTIAL') return <Seal tone="kibble" state="half" className={className}>ของไม่พอ ให้ตามที่มี</Seal>;
   return <Seal tone="rose" state="broken" className={className}>ตรวจแล้ว ไม่ตรงออเดอร์</Seal>;
+}
+
+/** ป้ายการจัดสินค้า: รอจัด (เส้นประ) / กำลังจัด · ชื่อคนจัด (ครึ่ง คาราเมล) / จัดเสร็จ (เต็ม ฟ้า) */
+export function PrepBadge({ prep, className }: { prep: Pick<OrderPrep, 'status' | 'byName'> | null | undefined; className?: string }) {
+  if (!prep?.status) return <Seal tone="muted" state="outline" className={className}>รอจัด</Seal>;
+  if (prep.status === 'PREPARING') return <Seal tone="kibble" state="half" className={className}>กำลังจัด{prep.byName && ` · ${prep.byName}`}</Seal>;
+  return <Seal tone="sky" className={className}>จัดเสร็จ</Seal>;
 }

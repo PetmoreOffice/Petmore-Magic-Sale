@@ -2,6 +2,7 @@
 export const PERMISSIONS = {
   'orders.view': 'ดูออเดอร์สินค้า',
   'orders.create': 'สร้างออเดอร์สินค้า',
+  'picks.prepare': 'จัดสินค้าตามออเดอร์',
   'picks.check': 'ตรวจของที่เบิกตอนส่งมอบ',
   'returns.create': 'บันทึกคืนสินค้า',
   'receive.view': 'ดูใบรับสินค้า',
@@ -26,7 +27,7 @@ export type Permission = keyof typeof PERMISSIONS;
 export const ALL_PERMISSIONS = Object.keys(PERMISSIONS) as Permission[];
 
 export const PERMISSION_GROUPS: { name: string; items: Permission[] }[] = [
-  { name: 'ออเดอร์สินค้า', items: ['orders.view', 'orders.create', 'picks.check', 'returns.create'] },
+  { name: 'ออเดอร์สินค้า', items: ['orders.view', 'orders.create', 'picks.prepare', 'picks.check', 'returns.create'] },
   { name: 'รับสินค้า', items: ['receive.view', 'receive.create', 'receive.print'] },
   { name: 'สต็อก', items: ['stock.view', 'stock.print'] },
   { name: 'ย้าย Location', items: ['move.view', 'move.create'] },
@@ -39,10 +40,14 @@ export const PERMISSION_GROUPS: { name: string; items: Permission[] }[] = [
 // ตำแหน่งเป็นแค่ค่าเริ่มต้นของสิทธิ์ แก้รายคนได้
 // ADMIN  ผู้ดูแลระบบ  ทำได้ทุกอย่าง
 // CHECKER แอดมิน      ตรวจของที่ Sup เบิกมาว่าถูกไหม บันทึกคืนสินค้า และทำงานคลัง
+// PACKER  คนจัดสินค้า   รับออเดอร์จากคิว หยิบของตามใบจัด แล้วส่งตรวจ
+// INSPECTOR คนตรวจสินค้า ตรวจของที่จัด/เบิกมาเทียบกับออเดอร์อย่างเดียว
 // PICKER  ผู้เบิกสินค้า (Sup) สร้างออเดอร์แล้วเบิกของ เห็นเฉพาะออเดอร์ของตัวเอง
 export const ROLES = {
   ADMIN: 'ผู้ดูแลระบบ',
   CHECKER: 'แอดมิน',
+  PACKER: 'คนจัดสินค้า',
+  INSPECTOR: 'คนตรวจสินค้า',
   PICKER: 'ผู้เบิกสินค้า',
 } as const;
 
@@ -52,6 +57,8 @@ export type RoleCode = keyof typeof ROLES;
 export const ROLE_DESCRIPTIONS: Record<RoleCode, string> = {
   ADMIN: 'ทำได้ทุกอย่าง รวมถึงจัดการผู้ใช้ ทะเบียนสินค้า และคลัง',
   CHECKER: 'ตรวจของที่เบิกมา บันทึกคืนสินค้า และทำงานคลัง',
+  PACKER: 'รับออเดอร์จากคิว จัดของตามใบจัด แล้วส่งตรวจ',
+  INSPECTOR: 'สแกนตรวจของที่จัด/เบิกมาเทียบกับออเดอร์ เห็นออเดอร์ทุกคน',
   PICKER: 'Sup สร้างออเดอร์แล้วเบิกของ เห็นเฉพาะออเดอร์ของตัวเอง',
 };
 
@@ -68,6 +75,8 @@ export const ROLE_DEFAULTS: Record<RoleCode, Permission[]> = {
     'move.view', 'move.create',
     'locations.view', 'locations.print',
   ],
+  PACKER: ['picks.prepare'],
+  INSPECTOR: ['picks.check'],
   PICKER: ['orders.view', 'orders.create'],
 };
 

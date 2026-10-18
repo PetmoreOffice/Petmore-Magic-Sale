@@ -1,7 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { CheckCounts, CheckFilter, Customer, hiddenFromOrders, MANUAL_REASONS, MAX_ORDER_LINES, ORDER_HIDDEN_OWNERS, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, SalesOrder, SessionUser } from '@petmore/shared';
+import { CheckCounts, CheckFilter, Customer, hiddenFromOrders, MANUAL_REASONS, MAX_ORDER_LINES, ORDER_HIDDEN_OWNERS, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, PrepAction, PrepCounts, PrepFilter, PrepStatus, SalesOrder, SessionUser } from '@petmore/shared';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { audit, nextDocNo, optionalText, requireRequestId, requireText } from '../common/util';
 import { isUniqueViolation, PrismaService } from '../prisma/prisma.service';
@@ -16,6 +16,12 @@ type StoredOrder = Prisma.SalesOrderGetPayload<{ include: typeof ORDER_INCLUDE }
 type StoredCheck = Prisma.PickCheckGetPayload<{ include: { lines: true } }>;
 /** ยอดที่นับได้ของรายการในออเดอร์ pieces = นับเป็นชิ้น (มีเมื่อให้ขนาดอื่นแทน) */
 type Counted = { qty: Prisma.Decimal; parts: PickCheckPart[]; pieces: { unit: Prisma.Decimal; actual: Prisma.Decimal } | null };
+
+/** จำนวนที่หยิบได้จาก JSON ของฐานข้อมูล เก็บเฉพาะค่าตัวเลขที่มากกว่า 0 */
+function pickedOf(value: Prisma.JsonValue): Record<string, number> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(Object.entries(value).filter(([, v]) => typeof v === 'number' && v > 0)) as Record<string, number>;
+}
 
 function dateOnly(value: unknown, label: string, optional = false): string {
   if (optional && !value) return '';
@@ -39,9 +45,9 @@ function numberValue(value: unknown, label: string, scale: number, positive: boo
 export class OrdersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  /** ผู้จัดการผู้ใช้และคนตรวจของเบิกเห็นออเดอร์ทุกคน ที่เหลือเห็นเฉพาะที่ตัวเองจด */
+  /** ผู้จัดการผู้ใช้ คนจัดสินค้า และคนตรวจของเบิกเห็นออเดอร์ทุกคน ที่เหลือเห็นเฉพาะที่ตัวเองจด */
   private seesAll(user: SessionUser) {
-    return (['users.manage', 'picks.check', 'returns.create'] as const).some((p) => user.permissions.includes(p));
+    return (['users.manage', 'picks.prepare', 'picks.check', 'returns.create'] as const).some((p) => user.permissions.includes(p));
   }
 
   private scope(user: SessionUser) {
@@ -60,7 +66,99 @@ export class OrdersService {
       lastCheck: order.checks[0]
         ? { id: order.checks[0].id, status: order.checks[0].status as PickCheck['status'], createdAt: order.checks[0].createdAt.toISOString(), pickerName: order.checks[0].pickerName }
         : null,
+      prep: {
+        status: order.prepStatus as PrepStatus, byId: order.prepById, byName: order.prepByName,
+        startedAt: order.prepStartedAt?.toISOString() ?? '', doneAt: order.prepDoneAt?.toISOString() ?? '', picked: pickedOf(order.prepPicked),
+      },
     };
+  }
+
+  /** จำนวนออเดอร์ในแต่ละแท็บของหน้าจัดสินค้า + เวลาของออเดอร์ล่าสุด (รู้ว่ามีออเดอร์ใหม่เข้าคิว) */
+  async prepCounts(): Promise<PrepCounts> {
+    const groups = await this.prisma.salesOrder.groupBy({ by: ['prepStatus'], _count: { _all: true }, _max: { createdAt: true } });
+    const n = (s: string) => groups.find((g) => g.prepStatus === s)?._count._all ?? 0;
+    const latest = groups.reduce((max, g) => (g._max.createdAt && g._max.createdAt > max ? g._max.createdAt : max), new Date(0));
+    return { WAITING: n(''), PREPARING: n('PREPARING'), READY: n('READY'), ALL: groups.reduce((t, g) => t + g._count._all, 0), latest: groups.length ? latest.toISOString() : '' };
+  }
+
+  /** คิวจัดสินค้า: รอจัดและกำลังจัด เก่าสุดก่อน (มาก่อนจัดก่อน) จัดเสร็จ/ทั้งหมด ใหม่สุดก่อน */
+  async prepList(q = '', pageValue = '1', filter: PrepFilter = 'WAITING'): Promise<Paged<SalesOrder>> {
+    const page = /^\d+$/.test(pageValue) ? Math.max(1, Math.min(100_000, Number(pageValue))) : 1;
+    const term = q.trim().slice(0, 100);
+    const status = filter === 'WAITING' ? '' : filter === 'PREPARING' || filter === 'READY' ? filter : null;
+    const where: Prisma.SalesOrderWhereInput = {
+      ...(status !== null ? { prepStatus: status } : {}),
+      ...(term ? { OR: ['id', 'customerCode', 'customerName', 'prepByName'].map((field) => ({ [field]: { contains: term, mode: 'insensitive' } })) } : {}),
+    };
+    const fifo = filter === 'WAITING' || filter === 'PREPARING';
+    const [total, rows] = await this.prisma.$transaction([
+      this.prisma.salesOrder.count({ where }),
+      this.prisma.salesOrder.findMany({ where, orderBy: fifo ? [{ createdAt: 'asc' }, { id: 'asc' }] : [{ createdAt: 'desc' }, { id: 'desc' }], skip: (page - 1) * 20, take: 20, include: ORDER_INCLUDE }),
+    ]);
+    return { rows: rows.map((row) => this.dto(row)), total, page, pages: Math.max(1, Math.ceil(total / 20)) };
+  }
+
+  /**
+   * จัดสินค้า: รับจัด / ติ๊กรายการ / คืนคิว / จัดเสร็จ / เปิดจัดใหม่
+   * รับจัดใช้เงื่อนไขในคำสั่ง update (สองคนกดพร้อมกันได้คนเดียว) คนอื่นแก้ได้เฉพาะเมื่อรับช่วงต่อ (force)
+   */
+  async prep(user: SessionUser, orderId: string, input: PrepAction): Promise<SalesOrder> {
+    if (!input || typeof input !== 'object' || typeof (input as { action?: unknown }).action !== 'string') throw new BadRequestException('ส่งคำสั่งจัดสินค้าไม่สำเร็จ โหลดหน้าใหม่แล้วลองอีกครั้ง');
+    const order = await this.prisma.salesOrder.findUnique({ where: { id: orderId }, include: { lines: { select: { lineNo: true } } } });
+    if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้ กลับไปเลือกจากคิวจัดสินค้าอีกครั้ง');
+    const mine = order.prepById === user.id;
+    const before = { prepStatus: order.prepStatus, prepById: order.prepById, prepPicked: order.prepPicked };
+    const busy = () => new ConflictException(`ออเดอร์นี้มีคนรับจัดแล้ว ${order.prepByName || 'คนอื่น'} กำลังจัดออเดอร์นี้อยู่ จัดซ้อนกันไม่ได้ ถ้าคนเดิมไม่อยู่แล้ว กด "รับช่วงต่อ"`);
+    let data: Prisma.SalesOrderUpdateManyMutationInput;
+    let where: Prisma.SalesOrderWhereInput = { id: orderId, prepStatus: order.prepStatus, prepById: order.prepById };
+    switch (input.action) {
+      case 'claim':
+        if (order.prepStatus === 'READY') throw new ConflictException('ออเดอร์นี้จัดเสร็จแล้ว ถ้าต้องจัดเพิ่ม กด "เปิดจัดใหม่"');
+        if (order.prepStatus === 'PREPARING' && !mine && !input.force) throw busy();
+        if (order.prepStatus === 'PREPARING' && mine) return this.get(user, orderId);
+        data = { prepStatus: 'PREPARING', prepById: user.id, prepByName: user.displayName, prepStartedAt: new Date() };
+        break;
+      case 'pick': {
+        if (order.prepStatus !== 'PREPARING' || !mine) throw order.prepStatus === 'PREPARING' ? busy() : new ConflictException('กด "รับจัด" ก่อนใส่จำนวนที่หยิบ');
+        if (!Number.isInteger(input.lineNo) || !order.lines.some((l) => l.lineNo === input.lineNo)) throw new BadRequestException('ไม่พบรายการนี้ในออเดอร์ โหลดหน้าใหม่');
+        const qty = input.qty === 0 ? 0 : numberValue(input.qty, 'จำนวนที่หยิบ', 3, false);
+        const key = String(input.lineNo);
+        // แก้ทีละรายการในคำสั่งเดียว สแกนรัวหลายรายการพร้อมกันไม่ทับกัน 0 = ล้างรายการนั้น
+        const changedPick = await this.prisma.$transaction(async (tx) => {
+          const n = qty
+            ? await tx.$executeRaw`UPDATE "SalesOrder" SET "prepPicked" = jsonb_set("prepPicked", ARRAY[${key}]::text[], to_jsonb(${qty}::numeric)) WHERE "id" = ${orderId} AND "prepStatus" = 'PREPARING' AND "prepById" = ${user.id}`
+            : await tx.$executeRaw`UPDATE "SalesOrder" SET "prepPicked" = "prepPicked" - ${key} WHERE "id" = ${orderId} AND "prepStatus" = 'PREPARING' AND "prepById" = ${user.id}`;
+          if (n) await audit(tx, 'orderPrep', orderId, user.id, null, { action: 'pick', lineNo: input.lineNo, qty });
+          return n;
+        });
+        if (!changedPick) throw new ConflictException('สถานะออเดอร์นี้เพิ่งเปลี่ยน โหลดหน้าใหม่แล้วลองอีกครั้ง');
+        return this.get(user, orderId);
+      }
+      case 'release':
+        if (order.prepStatus !== 'PREPARING') return this.get(user, orderId);
+        if (!mine) throw busy();
+        data = { prepStatus: '', prepById: '', prepByName: '', prepStartedAt: null };
+        break;
+      case 'done':
+        if (order.prepStatus === 'READY') return this.get(user, orderId);
+        if (order.prepStatus !== 'PREPARING' || !mine) throw order.prepStatus === 'PREPARING' ? busy() : new ConflictException('กด "รับจัด" ก่อน แล้วค่อยกดจัดเสร็จ');
+        data = { prepStatus: 'READY', prepDoneAt: new Date() };
+        break;
+      case 'reopen':
+        if (order.prepStatus !== 'READY') throw new ConflictException('ออเดอร์นี้ยังจัดไม่เสร็จ');
+        data = { prepStatus: 'PREPARING', prepById: user.id, prepByName: user.displayName, prepStartedAt: new Date(), prepDoneAt: null };
+        break;
+      default:
+        throw new BadRequestException('คำสั่งจัดสินค้าไม่ถูกต้อง');
+    }
+    const changed = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.salesOrder.updateMany({ where, data });
+      if (r.count) await audit(tx, 'orderPrep', orderId, user.id, before, { action: input.action, ...data });
+      return r.count;
+    });
+    // มีคนเปลี่ยนสถานะไปก่อนระหว่างนี้ (เช่น กดรับจัดพร้อมกัน)
+    if (!changed) throw new ConflictException(input.action === 'claim' ? 'มีคนรับจัดออเดอร์นี้ไปก่อนแล้ว จัดซ้อนกันไม่ได้ เลือกออเดอร์ถัดไปในคิว' : 'สถานะออเดอร์นี้เพิ่งเปลี่ยน โหลดคิวใหม่แล้วลองอีกครั้ง');
+    return this.get(user, orderId);
   }
 
   private checkDto(check: StoredCheck): PickCheck {
@@ -338,17 +436,29 @@ export class OrdersController {
   @RequirePermissions('picks.check')
   checkCounts(@CurrentUser() user: SessionUser) { return this.orders.checkCounts(user); }
 
+  @Get('prep')
+  @RequirePermissions('picks.prepare')
+  prepList(@Query('q') q?: string, @Query('page') page?: string, @Query('status') status?: PrepFilter) { return this.orders.prepList(q, page, status); }
+
+  @Get('prep-counts')
+  @RequirePermissions('picks.prepare')
+  prepCounts() { return this.orders.prepCounts(); }
+
   @Get('customers')
   @RequirePermissions('orders.create')
   customers() { return this.orders.customers(); }
 
   @Get(':id')
-  @RequirePermissions('orders.view', 'orders.create', 'picks.check', 'returns.create')
+  @RequirePermissions('orders.view', 'orders.create', 'picks.prepare', 'picks.check', 'returns.create')
   get(@CurrentUser() user: SessionUser, @Param('id') id: string) { return this.orders.get(user, id); }
 
   @Get(':id/checks/last')
   @RequirePermissions('orders.view', 'picks.check')
   lastCheck(@CurrentUser() user: SessionUser, @Param('id') id: string) { return this.orders.lastCheck(user, id); }
+
+  @Post(':id/prep')
+  @RequirePermissions('picks.prepare')
+  prep(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body() body: PrepAction) { return this.orders.prep(user, id, body); }
 
   @Post(':id/checks')
   @RequirePermissions('picks.check')

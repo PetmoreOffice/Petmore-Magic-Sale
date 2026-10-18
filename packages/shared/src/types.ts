@@ -391,6 +391,27 @@ export interface OrderLine extends OrderLineInput {
 export type PickCheckStatus = 'MATCH' | 'PARTIAL' | 'MISMATCH';
 /** แท็บในหน้าตรวจของเบิก: PENDING = ยังไม่ตรวจ, MATCH = ตรวจผ่าน (รวม PARTIAL) */
 export type CheckFilter = 'PENDING' | 'MATCH' | 'MISMATCH' | 'ALL';
+
+/** สถานะจัดสินค้า: '' = รอจัด, PREPARING = มีคนรับจัดอยู่, READY = จัดเสร็จ รอแอดมินตรวจ */
+export type PrepStatus = '' | 'PREPARING' | 'READY';
+export type PrepFilter = 'WAITING' | 'PREPARING' | 'READY' | 'ALL';
+export type PrepCounts = Record<PrepFilter, number> & { latest: string };
+/** การกระทำในหน้าจัดสินค้า: รับจัด (force = รับช่วงต่อจากคนอื่น), ใส่จำนวนที่หยิบได้ของรายการ (0 = ล้าง), คืนคิว, จัดเสร็จ, เปิดจัดใหม่ */
+export type PrepAction =
+  | { action: 'claim'; force?: boolean }
+  | { action: 'pick'; lineNo: number; qty: number }
+  | { action: 'release' }
+  | { action: 'done' }
+  | { action: 'reopen' };
+export interface OrderPrep {
+  status: PrepStatus;
+  byId: string;
+  byName: string;
+  startedAt: string;
+  doneAt: string;
+  /** จำนวนที่หยิบได้ต่อรายการ key = lineNo (เป็นข้อความเพราะมาจาก JSON) */
+  picked: Record<string, number>;
+}
 /** จำนวนในแต่ละแท็บ + เวลาสร้างของออเดอร์ล่าสุดที่เห็นได้ (ISO, ว่าง = ยังไม่มี) หน้าตรวจของเบิกใช้รู้ว่ามีออเดอร์ใหม่เข้ามา */
 export type CheckCounts = Record<CheckFilter, number> & { latest: string };
 
@@ -530,4 +551,6 @@ export interface SalesOrder {
   lines: OrderLine[];
   /** ผลตรวจของเบิกครั้งล่าสุด (null = ยังไม่ตรวจ) */
   lastCheck: { id: string; status: PickCheckStatus; createdAt: string; pickerName: string } | null;
+  /** การจัดสินค้า (ก่อนแอดมินตรวจของเบิก) */
+  prep: OrderPrep;
 }

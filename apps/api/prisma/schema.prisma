@@ -192,9 +192,18 @@ model SalesOrder {
   returns       ProductReturn[]
   /// ผลตรวจของเบิกครั้งล่าสุด '' = ยังไม่ตรวจ, MATCH, PARTIAL, MISMATCH (เก็บซ้ำไว้กรองรายการได้เร็ว)
   checkStatus   String         @default("")
+  /// การจัดสินค้า '' = รอจัด, PREPARING = กำลังจัด, READY = จัดเสร็จ รอตรวจ (หน้า /prepare)
+  prepStatus    String         @default("")
+  prepById      String         @default("")
+  prepByName    String         @default("")
+  prepStartedAt DateTime?
+  prepDoneAt    DateTime?
+  /// จำนวนที่คนจัดหยิบได้ต่อรายการ { "lineNo": qty } (สแกนแล้วใส่จำนวน)
+  prepPicked    Json           @default("{}")
 
   @@index([createdById, createdAt])
   @@index([checkStatus, createdAt])
+  @@index([prepStatus, createdAt])
 }
 
 model OrderLine {

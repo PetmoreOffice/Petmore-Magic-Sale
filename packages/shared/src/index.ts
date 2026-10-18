@@ -1,3 +1,4 @@
 export * from './permissions';
 export * from './types';
 export * from './wholesale';
+export * from './booths';

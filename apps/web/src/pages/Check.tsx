@@ -12,7 +12,7 @@ import { Input } from '@/components/ui/input';
 import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select';
 import { ScanFeedback, ScanInput, ScanInputHandle } from '@/components/ScanInput';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
-import { CheckBadge, Field, Message, Notice } from '@/components/wms';
+import { BoothName, CheckBadge, PrepBadge, Field, KeepIds, Message, Notice } from '@/components/wms';
 import { MagicStage, Medallion, TONES, type Tone, SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import BlurText from '@/components/BlurText';
 import SpotlightCard from '@/components/SpotlightCard';
@@ -485,10 +485,10 @@ export function CheckPage() {
                           <span className="grid min-w-0 flex-1 gap-1">
                             <strong className="line-clamp-2 font-medium break-words">
                               {isFresh && <span className={cn('mr-1.5 inline-grid h-5 place-items-center rounded-full px-2 align-[0.1em] text-xs font-bold', TONES.star)}>ใหม่</span>}
-                              {o.customerName}
+                              <BoothName code={o.customerCode} name={o.customerName} />
                             </strong>
                             <span className="text-sm text-muted-foreground">{o.id} · {o.date} · {o.lines.length} รายการ</span>
-                            <span><CheckBadge check={o.lastCheck} /></span>
+                            <span className="flex flex-wrap gap-1.5"><PrepBadge prep={o.prep} /><CheckBadge check={o.lastCheck} /></span>
                           </span>
                           <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" aria-hidden />
                         </button>
@@ -585,12 +585,12 @@ export function CheckPage() {
       <Notice message={message} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start">
-        {/* มือถือ: ท้องฟ้า → คนเบิก → รายการ / จอคอม: รายการซ้าย แผงสรุปติดขวา */}
+        {/* มือถือ: ท้องฟ้า → รายการ → ชื่อคนเบิก/หมายเหตุ (สแกนแล้วเห็นรายการทันที) / จอคอม: รายการซ้าย แผงสรุปติดขวา */}
         <aside className="contents lg:sticky lg:top-20 lg:order-2 lg:grid lg:gap-4">
           <div className="order-1">
             <Constellation order={order} rows={v.rows} extras={draft.extras.filter((x) => num(x.qty) > 0).length} match={v.match} total={v.total} onClose={closeOrder} disabled={saving} />
           </div>
-          <Card className="order-2">
+          <Card className="order-4 lg:order-2">
             <CardContent className="grid gap-3">
               <Field id="check-picker" label="ชื่อผู้เบิกสินค้า">
                 <Input id="check-picker" className={touchInput} value={draft.pickerName} maxLength={100} placeholder="เช่น สมชาย" onChange={(e) => setDraft((d) => ({ ...d, pickerName: e.target.value }))} />
@@ -685,7 +685,7 @@ function Constellation({ order, rows, extras, match, total, onClose, disabled }:
           <p className="font-mono text-sm text-brand-foreground/75">{order.id}</p>
           <Button variant="ghost" size="touch" className="px-3 text-brand-foreground hover:bg-on-sky/10 hover:text-brand-foreground" disabled={disabled} onClick={onClose}><ArrowLeftIcon />เปลี่ยนออเดอร์</Button>
         </div>
-        <p className="font-heading text-lg leading-snug font-semibold break-words">{order.customerName}</p>
+        <p className="font-heading text-lg leading-snug font-semibold break-words"><BoothName code={order.customerCode} name={order.customerName} /></p>
       </div>
       <p className="font-heading text-3xl font-semibold tabular-nums" aria-live="polite">
         <span className={match === total && !extras ? 'text-star' : ''}>{match}</span><span className="text-brand-foreground/60">/{total}</span>
@@ -862,9 +862,9 @@ function CheckResult({ check, order }: { check: PickCheck; order: SalesOrder }) 
               {check.status === 'MATCH' ? <CheckIcon className="size-8" aria-hidden /> : check.status === 'PARTIAL' ? <PackageIcon className="size-8" aria-hidden /> : <AlertTriangleIcon className="size-8" aria-hidden />}
             </span>
             {reduce || check.status !== 'MATCH'
-              ? <p className="font-heading text-2xl font-semibold sm:text-3xl">{title}</p>
+              ? <p className="font-heading text-2xl font-semibold sm:text-3xl"><KeepIds text={title} /></p>
               : <BlurText text={title} delay={120} animateBy="words" direction="top" className="justify-center font-heading text-2xl font-semibold sm:text-3xl" />}
-            <p className="text-brand-foreground/80">{order.customerName}{check.pickerName && ` · เบิกโดย ${check.pickerName}`} · {formatTime(check.createdAt)}</p>
+            <p className="text-brand-foreground/80"><BoothName code={order.customerCode} name={order.customerName} />{check.pickerName && ` · เบิกโดย ${check.pickerName}`} · {formatTime(check.createdAt)}</p>
           </div>
         </MagicStage>
       </div>

@@ -7,10 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { CameraButton } from '@/components/CameraButton';
-import { CheckBadge, Field, Message, Notice } from '@/components/wms';
+import { BoothName, CheckBadge, Field, KeepIds, Message, Notice } from '@/components/wms';
 import { CustomerPicker } from '@/components/CustomerPicker';
-import { OrderBarcode } from '@/components/OrderBarcode';
-import { lineCode, sortBySkuCode } from '@/lib/doc-lines';
+import { OrderReceipt } from '@/components/OrderReceipt';
+import { lineCode } from '@/lib/doc-lines';
 import { OrderCatalog } from '@/components/OrderCatalog';
 import { MagicStage, SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import StarBorder from '@/components/StarBorder';
@@ -19,7 +19,7 @@ import CountUp from '@/components/CountUp';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
 import { cartLineShown, formatQty, toOrderLine, type CartLine } from '@/lib/packs';
 import { scrollToStart, touchInput } from '@/lib/touch';
-import { api, formatTime, newRequestId, todayIso } from '../api';
+import { api, newRequestId, todayIso } from '../api';
 import { useAuth } from '../auth';
 
 const errorMessage = (e: unknown): Message => ({ kind: 'error', text: e instanceof Error ? e.message : String(e) });
@@ -168,7 +168,7 @@ export function OrdersPage() {
           {/* การ์ดสินค้าวางบนหน้าตรงๆ ไม่ห่อด้วย Card อีกชั้น (ห้ามการ์ดซ้อนการ์ด) */}
           <section className="grid gap-4" aria-labelledby="shop-heading">
             <div className="grid gap-1">
-              <div ref={viewHeading} tabIndex={-1} className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+              <div ref={viewHeading} tabIndex={-1} className="rounded-md outline-none">
                 <h2 id="shop-heading" className="font-heading text-xl font-semibold">เลือกสินค้า</h2>
               </div>
               <p className="text-sm text-muted-foreground">แตะสินค้าเพื่อเลือกบาร์โค้ดและจำนวน หรือสแกนบาร์โค้ดในช่องค้นหา</p>
@@ -201,7 +201,7 @@ export function OrdersPage() {
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
           <Card>
             <CardHeader>
-              <div ref={viewHeading} tabIndex={-1} className="flex items-baseline justify-between gap-3 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+              <div ref={viewHeading} tabIndex={-1} className="flex items-baseline justify-between gap-3 rounded-md outline-none">
                 <CardTitle role="heading" aria-level={2}>ตะกร้า</CardTitle>
                 <span className="text-sm text-muted-foreground tabular-nums">{lines.length}/{MAX_ORDER_LINES} รายการ</span>
               </div>
@@ -259,7 +259,7 @@ export function OrdersPage() {
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
           <Card>
             <CardHeader>
-              <div ref={viewHeading} tabIndex={-1} className="rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+              <div ref={viewHeading} tabIndex={-1} className="rounded-md outline-none">
                 <CardTitle role="heading" aria-level={2}>ยืนยันออเดอร์</CardTitle>
               </div>
             </CardHeader>
@@ -269,7 +269,6 @@ export function OrdersPage() {
                 <div className="sm:col-span-2"><CustomerPicker value={customer} onChange={setCustomer} disabled={saving} /></div>
                 <Field id="order-phone" label="เบอร์ติดต่อ (ถ้ามี)"><Input id="order-phone" className={touchInput} type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={50} autoComplete="tel" placeholder="เช่น 081-234-5678" /></Field>
                 <Field id="order-date" label="วันที่รับออเดอร์ *"><Input id="order-date" className={touchInput} type="date" value={date} onChange={(e) => setDate(e.target.value)} required /></Field>
-                <Field id="order-reference" label="เลขอ้างอิง (ถ้ามี)" className="sm:col-span-2"><Input id="order-reference" className={touchInput} value={reference} onChange={(e) => setReference(e.target.value)} maxLength={100} placeholder="เลขอ้างอิง" /></Field>
                 <Field id="order-note" label="หมายเหตุ (ถ้ามี)" className="sm:col-span-2"><textarea id="order-note" className={`${touchInput} min-h-24 w-full rounded-md border border-input bg-transparent p-3 text-base outline-none focus-visible:ring-3 focus-visible:ring-ring/50`} value={note} onChange={(e) => setNote(e.target.value)} maxLength={1000} placeholder="เช่น วิธีรับสินค้า หรือคำขอเพิ่มเติม" /></Field>
               </fieldset>
             </CardContent>
@@ -286,10 +285,10 @@ export function OrdersPage() {
       ) : (
         <Card className="mx-auto w-full max-w-3xl">
           <CardHeader>
-            <div ref={viewHeading} tabIndex={-1} className="scroll-mt-24 rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+            <div ref={viewHeading} tabIndex={-1} className="scroll-mt-24 rounded-md outline-none">
               <CardTitle role="heading" aria-level={2}>ออเดอร์ย้อนหลัง</CardTitle>
             </div>
-            <CardDescription>ค้นชื่อผู้สั่ง เบอร์โทร เลขออเดอร์ หรือเลขอ้างอิง</CardDescription>
+            <CardDescription>ค้นชื่อผู้สั่ง เบอร์โทร หรือเลขออเดอร์</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-4">
             <form className="flex gap-2" onSubmit={(e) => { e.preventDefault(); setPage(1); setHistoryQuery(historyTerm); setHistoryVersion((v) => v + 1); }}><Input aria-label="ค้นออเดอร์" className={touchInput} value={historyTerm} onChange={(e) => setHistoryTerm(e.target.value)} placeholder="ชื่อผู้สั่ง / เบอร์ / เลขออเดอร์" maxLength={100} /><Button type="submit" size="icon-touch" aria-label="ค้นออเดอร์ย้อนหลัง" disabled={loadingHistory}><SearchIcon /></Button><CameraButton label="สแกนบาร์โค้ดใบออเดอร์ด้วยกล้อง" disabled={loadingHistory} onResult={(code) => { setHistoryTerm(code); setPage(1); setHistoryQuery(code); setHistoryVersion((v) => v + 1); }} /></form>
@@ -297,7 +296,7 @@ export function OrdersPage() {
             {loadingHistory ? <p role="status" className="text-sm text-muted-foreground">กำลังโหลดออเดอร์…</p> : history && <>
               <p className="text-sm text-muted-foreground" role="status">{history.total} ออเดอร์ · หน้า {history.page}/{history.pages}</p>
               {!history.rows.length && <p className="py-4 text-sm text-muted-foreground">{historyQuery ? `ไม่พบออเดอร์ที่ตรงกับ “${historyQuery}” ลองค้นด้วยชื่อผู้สั่ง เบอร์ หรือเลขออเดอร์` : 'ยังไม่มีออเดอร์ ออเดอร์ที่บันทึกแล้วจะแสดงที่นี่'}</p>}
-              <div className="divide-y divide-border">{history.rows.map((order) => <button key={order.id} type="button" className="grid min-h-24 w-full gap-2 py-4 text-left outline-none hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring sm:grid-cols-[1fr_auto]" onClick={() => { setSelected(order); setMessage(null); }}><span className="grid min-w-0 gap-1"><strong className="font-heading break-words">{order.customerName}</strong><span className="text-sm text-muted-foreground">{order.id} · {order.date} · {order.lines.length} รายการ</span></span><span className="self-center"><CheckBadge check={order.lastCheck} /></span></button>)}</div>
+              <div className="divide-y divide-border">{history.rows.map((order) => <button key={order.id} type="button" className="grid min-h-24 w-full gap-2 py-4 text-left outline-none hover:bg-secondary focus-visible:ring-3 focus-visible:ring-ring sm:grid-cols-[1fr_auto]" onClick={() => { setSelected(order); setMessage(null); }}><span className="grid min-w-0 gap-1"><strong className="font-heading break-words"><BoothName code={order.customerCode} name={order.customerName} /></strong><span className="text-sm text-muted-foreground">{order.id} · {order.date} · {order.lines.length} รายการ</span></span><span className="self-center"><CheckBadge check={order.lastCheck} /></span></button>)}</div>
               {history.pages > 1 && <div className="flex justify-between gap-3"><Button variant="outline" size="touch" disabled={page <= 1} onClick={() => { setPage(page - 1); scrollToStart(viewHeading.current); }}>หน้าก่อน</Button><Button variant="outline" size="touch" disabled={page >= history.pages} onClick={() => { setPage(page + 1); scrollToStart(viewHeading.current); }}>หน้าถัดไป</Button></div>}
             </>}
           </CardContent>
@@ -330,7 +329,7 @@ function Steps({ current, hasLines, onGo }: { current: View; hasLines: boolean; 
               aria-current={active ? 'step' : undefined}
               onClick={() => onGo(step.view)}
               className={cn(
-                'flex min-h-12 items-center gap-2 rounded-full px-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default',
+                'flex min-h-12 min-w-11 items-center justify-center gap-2 rounded-full px-2 outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default',
                 active ? 'font-semibold text-brand-foreground' : 'text-brand-foreground/70 enabled:hover:text-brand-foreground',
               )}
             >
@@ -369,76 +368,6 @@ function Summary({ count, lines, children }: { count: number; lines?: CartLine[]
           <p className="text-sm text-muted-foreground">ออเดอร์บันทึกเฉพาะสินค้าและจำนวน ยังไม่ตัดสต็อก</p>
         </div>
         {children}
-      </CardContent>
-    </Card>
-  );
-}
-
-/** ใบออเดอร์ที่บันทึกแล้ว ใช้ทั้งหลังบันทึกและดูย้อนหลัง พิมพ์เป็นขาวดำได้ */
-function OrderReceipt({ order, actions }: { order: SalesOrder; actions: ReactNode }) {
-  return (
-    <Card data-print-doc className="mx-auto w-full max-w-3xl print:max-w-none">
-      <CardHeader>
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="grid gap-1">
-            <CardTitle role="heading" aria-level={2}>{order.id}</CardTitle>
-            <CardDescription>บันทึกเมื่อ {formatTime(order.createdAt)}</CardDescription>
-            <span className="print:hidden"><CheckBadge check={order.lastCheck} /></span>
-          </div>
-          {/* คนตรวจของเบิกสแกนบาร์โค้ดนี้เปิดออเดอร์ได้ทันที */}
-          <OrderBarcode id={order.id} />
-        </div>
-      </CardHeader>
-      {/* ตอนพิมพ์ใช้ block แทน grid: Chrome ตัดหน้ากระดาษกลาง grid แล้วบรรทัดซ้อนกัน */}
-      <CardContent className="grid gap-5 print:block print:space-y-5">
-        <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
-          <div className="sm:col-span-2"><dt className="text-muted-foreground">ผู้สั่ง{order.customerCode && <> · <span className="font-mono break-all">{order.customerCode}</span></>}</dt><dd className="font-heading text-lg font-semibold break-words">{order.customerName}</dd></div>
-          <div><dt className="text-muted-foreground">เบอร์ติดต่อ</dt><dd className="break-words">{order.phone || 'ไม่ได้ระบุ'}</dd></div>
-          <div><dt className="text-muted-foreground">วันที่รับออเดอร์</dt><dd>{order.date}</dd></div>
-          {/* ออเดอร์เก่าก่อนเลิกใช้ช่องนัดรับ ยังแสดงให้เห็น */}
-          {order.dueDate && <div><dt className="text-muted-foreground">วันที่นัดรับ / ส่ง</dt><dd>{order.dueDate}</dd></div>}
-        </dl>
-        {/* ใบจัดสินค้า: เรียงตามรหัสสินค้า (SKU_CODE) ของเดียวกันอยู่ติดกัน คนจัดหยิบได้ง่าย ช่องท้ายไว้เขียนจำนวนที่จัดได้ */}
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border text-left text-muted-foreground print:text-black">
-              <th className="hidden py-2 pr-2 font-medium sm:table-cell print:table-cell">รหัสสินค้า</th>
-              <th className="py-2 pr-2 font-medium">ชื่อสินค้า</th>
-              <th className="py-2 px-2 font-medium">หน่วย</th>
-              <th className="py-2 px-2 text-right font-medium">จำนวน</th>
-              <th className="py-2 pl-2 text-center font-medium">จำนวนที่จัดได้</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortBySkuCode(order.lines).map((line) => (
-              <tr key={line.lineNo} className="break-inside-avoid border-b border-border align-top">
-                <td className="hidden py-3 pr-2 font-mono text-xs whitespace-nowrap sm:table-cell print:table-cell print:py-1.5">{lineCode(line) || '–'}</td>
-                <td className="py-3 pr-2 print:py-1.5">
-                  <p className="font-medium break-words">{line.name}</p>
-                  {/* มือถือไม่มีคอลัมน์รหัส แสดงรหัสใต้ชื่อแทน บาร์โค้ดที่สั่งช่วยแยกขนาดของสินค้าเดียวกัน */}
-                  <p className="font-mono text-xs break-all text-muted-foreground"><span className="sm:hidden print:hidden">{lineCode(line)}{line.packCode && line.packCode !== lineCode(line) && ' · '}</span>{line.packCode && line.packCode !== lineCode(line) && line.packCode}</p>
-                </td>
-                <td className="py-3 px-2 [overflow-wrap:anywhere] print:py-1.5">{line.unit}</td>
-                <td className="py-3 px-2 text-right font-semibold tabular-nums print:py-1.5">{formatQty(line.qty)}</td>
-                <td className="py-2 pl-2 text-center print:py-1"><span aria-hidden className="inline-block h-9 w-16 rounded-md border-2 border-card-edge bg-background/40 print:h-7 print:border-black print:bg-transparent sm:w-20" /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="text-sm text-muted-foreground">รวม {order.lines.length} รายการ</p>
-        {order.reference && <p className="text-sm break-words">อ้างอิง: {order.reference}</p>}
-        {order.note && <p className="text-sm whitespace-pre-wrap break-words">หมายเหตุ: {order.note}</p>}
-        {/* ช่องเซ็นชื่อ 3 ฝ่าย ถ้าถูกดันไปหน้าใหม่ยังรู้ว่าเป็นของออเดอร์ไหน */}
-        <div className="grid break-inside-avoid grid-cols-3 gap-x-4 gap-y-6 pt-4 text-center text-sm sm:gap-x-8">
-          <p className="col-span-3 text-left text-xs text-muted-foreground print:text-black">ลงชื่อรับรองออเดอร์ {order.id}</p>
-          {['ผู้จัดสินค้า', 'ผู้ตรวจสอบสินค้า', 'ผู้รับสินค้า'].map((who) => (
-            <div key={who} className="grid min-w-0 gap-1">
-              <span className="border-b border-card-edge pb-8 print:border-black" />
-              <span className="text-xs font-medium break-words sm:text-sm">{who}</span>
-            </div>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-2 print:hidden">{actions}</div>
       </CardContent>
     </Card>
   );
@@ -491,10 +420,10 @@ function Celebration({ order }: { order: SalesOrder }) {
         <div className="grid justify-items-center gap-3 py-4 text-center">
           <span className="grid size-16 place-items-center rounded-full bg-mint-soft text-mint ring-4 ring-mint/25"><CheckIcon className="size-8" aria-hidden /></span>
           {reduce
-            ? <p className="font-heading text-2xl font-semibold sm:text-3xl">{title}</p>
+            ? <p className="font-heading text-2xl font-semibold sm:text-3xl"><KeepIds text={title} /></p>
             : <BlurText text={title} delay={120} animateBy="words" direction="top" className="justify-center font-heading text-2xl font-semibold sm:text-3xl" />}
           <p className="text-brand-foreground/80">
-            {order.customerName} · <span className="font-heading text-xl font-semibold text-star tabular-nums">{reduce ? order.lines.length : <CountUp from={0} to={order.lines.length} duration={0.8} />}</span> รายการ
+            <BoothName code={order.customerCode} name={order.customerName} /> · <span className="font-heading text-xl font-semibold text-star tabular-nums">{reduce ? order.lines.length : <CountUp from={0} to={order.lines.length} duration={0.8} />}</span> รายการ
           </p>
         </div>
       </MagicStage>

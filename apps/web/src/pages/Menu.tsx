@@ -1,8 +1,8 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRightIcon, ClipboardCheckIcon, Undo2Icon, WandSparklesIcon } from 'lucide-react';
+import { ChevronRightIcon, ClipboardCheckIcon, PackageCheckIcon, Undo2Icon, WandSparklesIcon } from 'lucide-react';
 import { cn } from 'cn';
-import type { CheckCounts, Paged, ProductReturn } from '@petmore/shared';
+import type { CheckCounts, Paged, PrepCounts, ProductReturn } from '@petmore/shared';
 import { MagicStage, Medallion, Sparkle } from '@/components/magic';
 import SpotlightCard from '@/components/SpotlightCard';
 import { APP_MENUS } from '@/lib/menus';
@@ -26,7 +26,7 @@ function greeting(now: Date) {
 
 /**
  * หน้าแรก: ท้องฟ้าทักทาย + งานค้างวันนี้ (แตะไปทำต่อได้) แล้วแยกงานเป็น 2 กลุ่ม
- * งานขายหน้างานเรียงเป็นเส้นทาง 3 ขั้น งานคลังเป็นช่องเล็กสีต่างกัน ใช้ตามสิทธิ์ของแต่ละคน
+ * งานขายหน้างานเรียงเป็นเส้นทาง 4 ขั้น งานคลังเป็นช่องเล็กสีต่างกัน ใช้ตามสิทธิ์ของแต่ละคน
  */
 export function MenuPage() {
   const { user, has } = useAuth();
@@ -38,10 +38,12 @@ export function MenuPage() {
   const now = new Date();
   const [counts, setCounts] = useState<CheckCounts | null>(null);
   const [returnsTotal, setReturnsTotal] = useState<number | null>(null);
+  const [prep, setPrep] = useState<PrepCounts | null>(null);
 
   // งานค้าง: ออเดอร์รอตรวจ / ตรวจแล้วไม่ครบ (สิทธิ์ตรวจของ) และจำนวนใบคืน (สิทธิ์คืนสินค้า) ไม่มีสิทธิ์ก็ไม่ดึง
   useEffect(() => {
     let live = true;
+    if (has('picks.prepare')) api<PrepCounts>('/orders/prep-counts').then((c) => { if (live) setPrep(c); }).catch(() => undefined);
     if (has('picks.check')) api<CheckCounts>('/orders/check-counts').then((c) => { if (live) setCounts(c); }).catch(() => undefined);
     if (has('returns.create')) api<Paged<ProductReturn>>('/returns?page=1').then((r) => { if (live) setReturnsTotal(r.total); }).catch(() => undefined);
     return () => { live = false; };
@@ -61,8 +63,14 @@ export function MenuPage() {
           <p className="mt-2 text-sm text-brand-foreground/80">{now.toLocaleDateString('th-TH', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Bangkok' })}</p>
           <p className="text-sm text-brand-foreground/75">ขอบเขตคลัง: {scope?.all ? 'ทุกคลัง' : scope?.codes.join(', ') || 'ยังไม่ได้รับสิทธิ์คลัง ติดต่อผู้ดูแลระบบ'}</p>
         </div>
-        {(counts || returnsTotal !== null) && (
+        {(prep || counts || returnsTotal !== null) && (
           <div className="flex flex-wrap gap-2 lg:max-w-xs lg:flex-col lg:items-stretch" aria-label="งานที่ต้องทำและประวัติ">
+            {prep && (
+              <Link to="/prepare" className={cn('inline-flex min-h-12 items-center gap-2 rounded-full px-4 text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-star/60', prep.WAITING ? 'bg-star text-on-star' : 'bg-on-sky/10 text-brand-foreground ring-1 ring-on-sky/15 hover:bg-on-sky/15')}>
+                <PackageCheckIcon className="size-4" aria-hidden />
+                {prep.WAITING ? <>รอจัด <span className="tabular-nums">{num(prep.WAITING)}</span> ออเดอร์</> : prep.PREPARING ? <>กำลังจัด <span className="tabular-nums">{num(prep.PREPARING)}</span> ออเดอร์</> : prep.ALL ? 'จัดครบทุกออเดอร์แล้ว' : 'ยังไม่มีออเดอร์ให้จัด'}
+              </Link>
+            )}
             {counts && (
               <Link to="/check" className={cn('inline-flex min-h-12 items-center gap-2 rounded-full px-4 text-sm font-semibold outline-none focus-visible:ring-3 focus-visible:ring-star/60', counts.PENDING ? 'bg-star text-on-star' : 'bg-on-sky/10 text-brand-foreground ring-1 ring-on-sky/15 hover:bg-on-sky/15')}>
                 <ClipboardCheckIcon className="size-4" aria-hidden />
@@ -87,7 +95,7 @@ export function MenuPage() {
         <section className="grid gap-4" aria-labelledby="menu-sales">
           <div>
             <h2 id="menu-sales" className="font-heading text-xl font-semibold">งานขายหน้างาน</h2>
-            <p className="text-sm text-muted-foreground">จดออเดอร์ ตรวจของที่เบิก แล้วคืนของที่เหลือ ตามลำดับ</p>
+            <p className="text-sm text-muted-foreground">จดออเดอร์ จัดสินค้า ตรวจของที่เบิก แล้วคืนของที่เหลือ ตามลำดับ</p>
           </div>
           {/* ลำดับงานขายเรียงบนลงล่าง จอคอมมีงานคลังอยู่ข้างกัน */}
           {/* เส้นทางดาว: เส้นประทองลากผ่านกลางวงเวทของทุกขั้น บอกว่าสามงานนี้ต่อกันเป็นลำดับ */}
