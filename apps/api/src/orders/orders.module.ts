@@ -1,7 +1,7 @@
 import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { CheckCounts, CheckFilter, Customer, hiddenFromOrders, MANUAL_REASONS, MAX_ORDER_LINES, ORDER_HIDDEN_OWNERS, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, PrepAction, PrepCounts, PrepFilter, PrepStatus, SalesOrder, SessionUser } from '@petmore/shared';
+import { CheckCounts, CheckFilter, Customer, hiddenFromOrders, MANUAL_REASONS, MAX_ORDER_LINES, ORDER_HIDDEN_OWNERS, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, PrepAction, PrepCounts, PrepFilter, PrepLinePick, PrepStatus, SalesOrder, SessionUser } from '@petmore/shared';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { audit, nextDocNo, optionalText, requireRequestId, requireText } from '../common/util';
 import { isUniqueViolation, PrismaService } from '../prisma/prisma.service';
@@ -17,10 +17,24 @@ type StoredCheck = Prisma.PickCheckGetPayload<{ include: { lines: true } }>;
 /** ยอดที่นับได้ของรายการในออเดอร์ pieces = นับเป็นชิ้น (มีเมื่อให้ขนาดอื่นแทน) */
 type Counted = { qty: Prisma.Decimal; parts: PickCheckPart[]; pieces: { unit: Prisma.Decimal; actual: Prisma.Decimal } | null };
 
-/** จำนวนที่หยิบได้จาก JSON ของฐานข้อมูล เก็บเฉพาะค่าตัวเลขที่มากกว่า 0 */
-function pickedOf(value: Prisma.JsonValue): Record<string, number> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
-  return Object.fromEntries(Object.entries(value).filter(([, v]) => typeof v === 'number' && v > 0)) as Record<string, number>;
+/**
+ * จำนวนที่หยิบได้จาก JSON ของฐานข้อมูล ต่อรายการเป็นตัวเลข (ขนาดที่สั่งอย่างเดียว)
+ * หรือ { own, qty, parts, perUnit, pieces } เมื่อให้ขนาดอื่นแทน (qty = เทียบเป็นหน่วยที่สั่ง)
+ */
+function prepPicks(value: Prisma.JsonValue): { picked: Record<string, number>; parts: Record<string, PrepLinePick> } {
+  const picked: Record<string, number> = {};
+  const parts: Record<string, PrepLinePick> = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { picked, parts };
+  for (const [key, v] of Object.entries(value)) {
+    if (typeof v === 'number') { if (v > 0) picked[key] = v; continue; }
+    if (!v || typeof v !== 'object' || Array.isArray(v)) continue;
+    const x = v as { own?: unknown; qty?: unknown; parts?: unknown; perUnit?: unknown; pieces?: unknown };
+    if (typeof x.qty === 'number' && x.qty > 0) picked[key] = x.qty;
+    if (Array.isArray(x.parts) && x.parts.length) {
+      parts[key] = { own: Number(x.own) || 0, parts: x.parts as PickCheckPart[], perUnit: Number(x.perUnit) || 0, pieces: Number(x.pieces) || 0 };
+    }
+  }
+  return { picked, parts };
 }
 
 function dateOnly(value: unknown, label: string, optional = false): string {
@@ -68,7 +82,7 @@ export class OrdersService {
         : null,
       prep: {
         status: order.prepStatus as PrepStatus, byId: order.prepById, byName: order.prepByName,
-        startedAt: order.prepStartedAt?.toISOString() ?? '', doneAt: order.prepDoneAt?.toISOString() ?? '', picked: pickedOf(order.prepPicked),
+        startedAt: order.prepStartedAt?.toISOString() ?? '', doneAt: order.prepDoneAt?.toISOString() ?? '', ...prepPicks(order.prepPicked),
       },
     };
   }
@@ -104,7 +118,7 @@ export class OrdersService {
    */
   async prep(user: SessionUser, orderId: string, input: PrepAction): Promise<SalesOrder> {
     if (!input || typeof input !== 'object' || typeof (input as { action?: unknown }).action !== 'string') throw new BadRequestException('ส่งคำสั่งจัดสินค้าไม่สำเร็จ โหลดหน้าใหม่แล้วลองอีกครั้ง');
-    const order = await this.prisma.salesOrder.findUnique({ where: { id: orderId }, include: { lines: { select: { lineNo: true } } } });
+    const order = await this.prisma.salesOrder.findUnique({ where: { id: orderId }, include: { lines: { select: { lineNo: true, sku: true, packCode: true, name: true } } } });
     if (!order) throw new NotFoundException('ไม่พบออเดอร์นี้ กลับไปเลือกจากคิวจัดสินค้าอีกครั้ง');
     const mine = order.prepById === user.id;
     const before = { prepStatus: order.prepStatus, prepById: order.prepById, prepPicked: order.prepPicked };
@@ -120,15 +134,31 @@ export class OrdersService {
         break;
       case 'pick': {
         if (order.prepStatus !== 'PREPARING' || !mine) throw order.prepStatus === 'PREPARING' ? busy() : new ConflictException('กด "รับจัด" ก่อนใส่จำนวนที่หยิบ');
-        if (!Number.isInteger(input.lineNo) || !order.lines.some((l) => l.lineNo === input.lineNo)) throw new BadRequestException('ไม่พบรายการนี้ในออเดอร์ โหลดหน้าใหม่');
+        const line = Number.isInteger(input.lineNo) ? order.lines.find((l) => l.lineNo === input.lineNo) : undefined;
+        if (!line) throw new BadRequestException('ไม่พบรายการนี้ในออเดอร์ โหลดหน้าใหม่');
         const qty = input.qty === 0 ? 0 : numberValue(input.qty, 'จำนวนที่หยิบ', 3, false);
-        const key = String(input.lineNo);
-        // แก้ทีละรายการในคำสั่งเดียว สแกนรัวหลายรายการพร้อมกันไม่ทับกัน 0 = ล้างรายการนั้น
+        const key = String(line.lineNo);
+        // ไม่ส่ง packCode หรือเป็นบาร์ของรายการเอง = ขนาดที่สั่ง, บาร์อื่น = ให้ขนาดอื่นแทน
+        const partCode = optionalText(input.packCode, 100);
+        const substitute = !!partCode && partCode !== line.packCode;
+        // ล็อกแถวก่อนอ่านยอดเดิมของรายการ สแกนรัวหลายรายการพร้อมกันไม่ทับกัน 0 = ล้างขนาดนั้น
         const changedPick = await this.prisma.$transaction(async (tx) => {
-          const n = qty
-            ? await tx.$executeRaw`UPDATE "SalesOrder" SET "prepPicked" = jsonb_set("prepPicked", ARRAY[${key}]::text[], to_jsonb(${qty}::numeric)) WHERE "id" = ${orderId} AND "prepStatus" = 'PREPARING' AND "prepById" = ${user.id}`
-            : await tx.$executeRaw`UPDATE "SalesOrder" SET "prepPicked" = "prepPicked" - ${key} WHERE "id" = ${orderId} AND "prepStatus" = 'PREPARING' AND "prepById" = ${user.id}`;
-          if (n) await audit(tx, 'orderPrep', orderId, user.id, null, { action: 'pick', lineNo: input.lineNo, qty });
+          const rows = await tx.$queryRaw<{ prepPicked: Prisma.JsonValue }[]>`SELECT "prepPicked" FROM "SalesOrder" WHERE "id" = ${orderId} AND "prepStatus" = 'PREPARING' AND "prepById" = ${user.id} FOR UPDATE`;
+          if (!rows.length) return 0;
+          const now = prepPicks(rows[0].prepPicked);
+          const had = now.parts[key];
+          const own = substitute ? (had ? had.own : now.picked[key] ?? 0) : qty;
+          const parts = (had?.parts ?? []).filter((p) => p.packCode !== partCode || !substitute).map((p) => ({ packCode: p.packCode, qty: p.qty }));
+          if (substitute && qty) parts.push({ packCode: partCode, qty });
+          let value: Prisma.InputJsonValue | null = own || null;
+          if (parts.length) {
+            const counted = await this.countWithParts(line, own, parts);
+            value = { own, qty: counted.qty.toNumber(), parts: counted.parts as unknown as Prisma.InputJsonValue, perUnit: counted.pieces?.unit.toNumber() ?? 0, pieces: counted.pieces?.actual.toNumber() ?? 0 };
+          }
+          const n = value === null
+            ? await tx.$executeRaw`UPDATE "SalesOrder" SET "prepPicked" = "prepPicked" - ${key} WHERE "id" = ${orderId}`
+            : await tx.$executeRaw`UPDATE "SalesOrder" SET "prepPicked" = jsonb_set("prepPicked", ARRAY[${key}]::text[], ${JSON.stringify(value)}::jsonb) WHERE "id" = ${orderId}`;
+          if (n) await audit(tx, 'orderPrep', orderId, user.id, null, { action: 'pick', lineNo: line.lineNo, qty, packCode: substitute ? partCode : line.packCode });
           return n;
         });
         if (!changedPick) throw new ConflictException('สถานะออเดอร์นี้เพิ่งเปลี่ยน โหลดหน้าใหม่แล้วลองอีกครั้ง');

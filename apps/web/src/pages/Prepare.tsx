@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeftIcon, CheckIcon, ChevronRightIcon, HandIcon, LoaderCircleIcon, LockIcon, PackageCheckIcon, PrinterIcon, RotateCcwIcon, SparklesIcon, Undo2Icon } from 'lucide-react';
+import { ArrowLeftIcon, CheckIcon, ChevronRightIcon, HandIcon, LoaderCircleIcon, LockIcon, PackageCheckIcon, PlusIcon, PrinterIcon, RefreshCcwIcon, RotateCcwIcon, SparklesIcon, Undo2Icon } from 'lucide-react';
 import { cn } from 'cn';
-import { type OrderLine, type Paged, type PrepAction, type PrepCounts, type PrepFilter, type Product, type SalesOrder } from '@petmore/shared';
+import { type OrderLine, type PickCheckPart, type Paged, type PrepAction, type PrepCounts, type PrepFilter, type Product, type SalesOrder } from '@petmore/shared';
 import { Button } from '@/components/ui/button';
 import { MagicStage, Medallion, SlotSparkles, Sparkle, SPELL_SLOT, ToneChip, TONES, unitTone, type Tone } from '@/components/magic';
 import SpotlightCard from '@/components/SpotlightCard';
@@ -33,6 +33,21 @@ const orderedAt = (iso: string) => {
 /** ชิ้นต่อหน่วยจากชื่อหน่วย ("PACK x 4 x 12" = 48, "PC" = 1) ใช้เลือกสีป้ายหน่วย */
 const unitPieces = (unit: string) => (unit.match(/x\s*\d+/gi) ?? []).reduce((n, m) => n * Number(m.replace(/\D/g, '')), 1);
 
+/** ความคืบหน้าของรายการ: ให้ขนาดอื่นแทนแล้วเทียบเป็นชิ้น (ห้ามแสดงทศนิยมของหน่วยที่สั่ง) ไม่งั้นเทียบหน่วยที่สั่ง */
+type Progress = { pieces: boolean; got: number; need: number; diff: number; own: number; perUnit: number; parts: PickCheckPart[] };
+function progressOf(o: SalesOrder, l: OrderLine): Progress {
+  const key = String(l.lineNo);
+  const p = o.prep.parts?.[key];
+  if (p && p.perUnit > 0) {
+    const need = l.qty * p.perUnit;
+    return { pieces: true, got: p.pieces, need, diff: Math.round((p.pieces - need) * 1000) / 1000, own: p.own, perUnit: p.perUnit, parts: p.parts };
+  }
+  const got = o.prep.picked[key] ?? 0;
+  return { pieces: false, got, need: l.qty, diff: Math.round((got - l.qty) * 1000) / 1000, own: got, perUnit: 0, parts: [] };
+}
+/** ช่องใส่จำนวน: part = ให้ขนาดอื่นแทน (จำนวนเป็นหน่วยของขนาดนั้น) */
+type Entry = { lineNo: number; value: string; part?: { packCode: string; unit: string; pieces: number; perUnit: number } };
+
 function BoothName({ order }: { order: SalesOrder }) {
   return <Booth code={order.customerCode} name={order.customerName} />;
 }
@@ -60,7 +75,7 @@ export function PreparePage() {
   const listTop = useRef<HTMLDivElement>(null);
   const scanRef = useRef<ScanInputHandle>(null);
   // รายการที่กำลังใส่จำนวน (หลังสแกน หรือแตะแถว)
-  const [entry, setEntry] = useState<{ lineNo: number; value: string } | null>(null);
+  const [entry, setEntry] = useState<Entry | null>(null);
   const orderRef = useRef(order);
   orderRef.current = order;
 
@@ -118,14 +133,27 @@ export function PreparePage() {
     } finally { setBusy(false); }
   }
 
-  const pickedOf = (o: SalesOrder, l: OrderLine) => o.prep.picked[String(l.lineNo)] ?? 0;
-
-  /** เปิดช่องใส่จำนวนของรายการ ตั้งต้นเป็นจำนวนที่ยังขาด แล้วโฟกัสช่องจำนวน (Handheld พิมพ์เลขแล้ว Enter ได้เลย) */
-  function startEntry(l: OrderLine) {
+  /**
+   * เปิดช่องใส่จำนวนของรายการ แล้วโฟกัสช่องจำนวน (Handheld พิมพ์เลขแล้ว Enter ได้เลย)
+   * ขนาดที่สั่ง: ตั้งต้น = ยอดที่ยังขาด, ขนาดอื่นแทน: ตั้งต้น = ที่ให้แทนไว้แล้ว + จำนวนที่พอดีกับชิ้นที่ยังขาด
+   */
+  function startEntry(l: OrderLine, part?: Entry['part']) {
     const o = orderRef.current;
     if (!o) return;
-    const remaining = Math.max(0, l.qty - pickedOf(o, l));
-    setEntry({ lineNo: l.lineNo, value: String(remaining || l.qty) });
+    const pr = progressOf(o, l);
+    let value: number;
+    if (part) {
+      const has = pr.parts.find((x) => x.packCode === part.packCode)?.qty ?? 0;
+      const gotPieces = pr.pieces ? pr.got : pr.got * part.perUnit;
+      const short = l.qty * part.perUnit - gotPieces;
+      value = short > 0 ? has + Math.ceil(short / part.pieces) : has || 1;
+    } else if (pr.pieces) {
+      const short = pr.need - pr.got;
+      value = pr.own + (short > 0 ? Math.floor(short / pr.perUnit) : 0) || 1;
+    } else {
+      value = Math.max(0, l.qty - pr.got) || l.qty;
+    }
+    setEntry({ lineNo: l.lineNo, value: String(value), part });
     setConfirm(null);
     setTimeout(() => {
       const el = document.getElementById('prep-qty') as HTMLInputElement | null;
@@ -143,24 +171,40 @@ export function PreparePage() {
     if (!o || !code) return;
     if (!(o.prep.status === 'PREPARING' && o.prep.byId === user?.id)) return { ok: false, text: 'กด "รับจัดออเดอร์นี้" ก่อนสแกน' };
     const sorted = sortBySkuCode(o.lines);
-    const notDone = (ls: OrderLine[]) => ls.find((l) => pickedOf(o, l) < l.qty) ?? ls[0];
-    let hit = notDone(sorted.filter((l) => l.packCode === code || (!l.packCode && lineCode(l) === code)));
-    if (!hit) {
-      let p: Product | null = null;
-      try { p = await api<Product>('/products/lookup/' + encodeURIComponent(code)); }
-      catch (e) { if (!(e instanceof ApiError && e.status === 404)) return { ok: false, text: errorText(e) }; }
-      if (!p) return { ok: false, text: `ไม่พบสินค้ารหัส ${code} ลองสแกนอีกครั้ง หรือแตะรายการเพื่อใส่จำนวนเอง` };
-      const product = p;
-      const scanned = product.packs?.find((x) => x.code === code);
-      const size = (c: string) => { const k = product.packs?.find((x) => x.code === c); return k ? `${k.unitName}|${k.unitQty}` : ''; };
-      const sameSku = sorted.filter((l) => l.sku === product.sku);
-      // บาร์โค้ดคนละตัวแต่ขนาดเดียวกัน (เช่น บาร์ปกติกับบาร์ L) นับเป็นรายการเดียวกัน
-      hit = notDone(sameSku.filter((l) => scanned ? size(l.packCode) === size(scanned.code) : l.packCode === product.sku));
-      if (!hit && sameSku.length) return { ok: false, text: `ผิดขนาด! ${scanned?.unitName ?? product.unit} · ออเดอร์สั่งเป็น ${sameSku.map((l) => l.unit).join(', ')}` };
-      if (!hit) return { ok: false, text: `ไม่อยู่ในออเดอร์! ${product.name}` };
-    }
-    startEntry(hit);
-    return { ok: true, text: `${hit.name} · สั่ง ${formatQty(hit.qty)} ${hit.unit} ใส่จำนวนที่หยิบได้` };
+    const short = (ls: OrderLine[]) => ls.find((l) => progressOf(o, l).diff < 0);
+    const own = (l: OrderLine) => {
+      startEntry(l);
+      return { ok: true, text: `${l.name} · สั่ง ${formatQty(l.qty)} ${l.unit} ใส่จำนวนที่หยิบได้` };
+    };
+    const exact = sorted.filter((l) => l.packCode === code || (!l.packCode && lineCode(l) === code));
+    const exactShort = short(exact);
+    if (exactShort) return own(exactShort);
+    let p: Product | null = null;
+    try { p = await api<Product>('/products/lookup/' + encodeURIComponent(code)); }
+    catch (e) { if (!(e instanceof ApiError && e.status === 404)) return { ok: false, text: errorText(e) }; }
+    if (!p) return exact.length ? own(exact[0]) : { ok: false, text: `ไม่พบสินค้ารหัส ${code} ลองสแกนอีกครั้ง หรือแตะรายการเพื่อใส่จำนวนเอง` };
+    const product = p;
+    const packOf = (c: string) => product.packs?.find((x) => x.code === c);
+    const scanned = packOf(code);
+    const sameSku = sorted.filter((l) => l.sku === product.sku);
+    // บาร์โค้ดคนละตัวแต่ขนาดเดียวกัน (เช่น บาร์ปกติกับบาร์ L) นับเป็นรายการเดียวกัน
+    const sameSize = (l: OrderLine) => { const k = packOf(l.packCode); return scanned ? !!k && k.unitName === scanned.unitName && k.unitQty === scanned.unitQty : l.packCode === product.sku; };
+    const mine = [...exact, ...sameSku.filter((l) => !exact.includes(l) && sameSize(l))];
+    // ขนาดอื่นของ SKU เดียวกันที่แปลงเป็นชิ้นได้ (สั่งลัง ของเหลือโหล) ให้แทนได้ นับเป็นชิ้น
+    const others = scanned && scanned.unitQty > 0 ? sameSku.filter((l) => !mine.includes(l) && (packOf(l.packCode)?.unitQty ?? 0) > 0) : [];
+    const substitute = (l: OrderLine) => {
+      startEntry(l, { packCode: scanned!.code, unit: scanned!.unitName, pieces: scanned!.unitQty, perUnit: packOf(l.packCode)!.unitQty });
+      return { ok: true, text: `ให้ ${scanned!.unitName} แทน ${l.unit} · ${l.name} ใส่จำนวน ${scanned!.unitName} ที่หยิบได้` };
+    };
+    const mineShort = short(mine);
+    if (mineShort) return own(mineShort);
+    const otherShort = short(others);
+    if (otherShort) return substitute(otherShort);
+    // ครบทุกรายการแล้ว: ยังให้ใส่จำนวนได้ ช่องจำนวนจะเตือนว่าเกิน
+    if (mine.length) return own(mine[0]);
+    if (others.length) return substitute(others[0]);
+    if (sameSku.length) return { ok: false, text: `ผิดขนาด! ${scanned?.unitName ?? product.unit} · ออเดอร์สั่งเป็น ${sameSku.map((l) => l.unit).join(', ')} แปลงเป็นชิ้นไม่ได้` };
+    return { ok: false, text: `ไม่อยู่ในออเดอร์! ${product.name}` };
   }
 
   async function savePick() {
@@ -178,7 +222,7 @@ export function PreparePage() {
     if (entry.value.trim() === '' || !Number.isFinite(qty) || qty < 0) { setMessage({ kind: 'error', text: 'ใส่จำนวนที่หยิบได้เป็นตัวเลข 0 ขึ้นไป' }); return; }
     setBusy(true); setMessage(null);
     try {
-      setOrder(await api<SalesOrder>(`/orders/${encodeURIComponent(o.id)}/prep`, { method: 'POST', body: { action: 'pick', lineNo: entry.lineNo, qty } }));
+      setOrder(await api<SalesOrder>(`/orders/${encodeURIComponent(o.id)}/prep`, { method: 'POST', body: { action: 'pick', lineNo: entry.lineNo, qty, packCode: entry.part?.packCode } }));
       setEntry(null);
       setTimeout(() => scanRef.current?.focus(), 50);
     } catch (e) {
@@ -280,8 +324,12 @@ export function PreparePage() {
   // ---------- ใบจัดของออเดอร์ที่เปิด ----------
   const status = order.prep.status;
   const mine = status === 'PREPARING' && order.prep.byId === user?.id;
-  const picked = (l: OrderLine) => pickedOf(order, l);
-  const left = lines.filter((l) => picked(l) < l.qty).length;
+  const progress = new Map(lines.map((l) => [l.lineNo, progressOf(order, l)]));
+  const prog = (l: OrderLine) => progress.get(l.lineNo)!;
+  const left = lines.filter((l) => prog(l).diff < 0).length;
+  const over = lines.filter((l) => prog(l).diff > 0).length;
+  // ครบ = ตรงยอดสั่งพอดี (เกินไม่นับว่าครบ)
+  const exact = lines.length - left - over;
   const canPick = mine && !busy;
   const entryLine = entry ? lines.find((l) => l.lineNo === entry.lineNo) : undefined;
 
@@ -299,8 +347,8 @@ export function PreparePage() {
           </div>
           <div className="flex flex-wrap items-end justify-between gap-x-3 gap-y-1">
             <PrepBadge prep={order.prep} />
-            <p className="font-heading text-3xl leading-none font-semibold tabular-nums" aria-label={`หยิบครบแล้ว ${lines.length - left} จาก ${lines.length} รายการ`}>
-              <span className={cn(lines.length > 0 && !left && 'text-star')}>{lines.length - left}</span><span className="text-lg text-brand-foreground/70">/{lines.length}</span>
+            <p className="font-heading text-3xl leading-none font-semibold tabular-nums" aria-label={`หยิบครบแล้ว ${exact} จาก ${lines.length} รายการ`}>
+              <span className={cn(lines.length > 0 && exact === lines.length && 'text-star')}>{exact}</span><span className="text-lg text-brand-foreground/70">/{lines.length}</span>
               <span className="ml-1.5 align-middle font-sans text-sm font-normal text-brand-foreground/80">รายการครบ</span>
             </p>
           </div>
@@ -312,7 +360,7 @@ export function PreparePage() {
           {status === 'PREPARING' && !mine && (
             <div role="status" className="grid gap-2 rounded-xl bg-on-sky/10 p-3 ring-1 ring-on-sky-kibble/40">
               <p className="flex items-center gap-2 font-semibold"><LockIcon className="size-5 shrink-0 text-on-sky-kibble" aria-hidden /><span>ออเดอร์นี้มีคนรับจัดแล้ว <span className="whitespace-nowrap">จัดซ้อนกันไม่ได้</span></span></p>
-              <p className="text-sm text-brand-foreground/85"><b className="whitespace-nowrap">{order.prep.byName}</b> กำลังจัดอยู่ ตั้งแต่ {order.prep.startedAt ? clockTime(order.prep.startedAt) : '-'} · หยิบครบ {lines.length - left}/{lines.length} รายการ ระบบล็อกไว้กันหยิบของซ้ำ</p>
+              <p className="text-sm text-brand-foreground/85"><b className="whitespace-nowrap">{order.prep.byName}</b> กำลังจัดอยู่ ตั้งแต่ {order.prep.startedAt ? clockTime(order.prep.startedAt) : '-'} · หยิบครบ {exact}/{lines.length} รายการ ระบบล็อกไว้กันหยิบของซ้ำ</p>
               {confirm === 'takeover' ? (
                 <div className="grid gap-2">
                   <p className="text-sm">รับช่วงต่อจาก <b className="whitespace-nowrap">{order.prep.byName}</b>? เครื่องของ <span className="whitespace-nowrap">{order.prep.byName}</span> จะใส่จำนวนหรือกดจัดเสร็จไม่ได้อีก จำนวนที่หยิบไปแล้วยังอยู่</p>
@@ -339,48 +387,87 @@ export function PreparePage() {
         )}
         {/* รับจัดแล้ว: สแกนของที่หยิบ (หัวสแกน Handheld หรือกล้อง) แล้วใส่จำนวน */}
         {mine && <ScanInput ref={scanRef} label="สแกนสินค้าที่หยิบ" placeholder="สแกนหรือพิมพ์บาร์โค้ด" hint="สแกนแล้วใส่จำนวนที่หยิบได้ สินค้าไม่มีบาร์โค้ด แตะรายการเพื่อใส่จำนวนเอง" onScan={handleScan} autoFocus />}
-        {mine && entry && entryLine && (
+        {mine && entry && entryLine && (() => {
+          const pr = prog(entryLine);
+          const part = entry.part;
+          const unit = part?.unit ?? entryLine.unit;
+          const typed = Number(entry.value) || 0;
+          // ยอดหลังบันทึก (ชิ้นถ้ามี/จะมีขนาดอื่นแทน) ไว้เตือนเกินก่อนกดบันทึก
+          const perUnit = part?.perUnit ?? pr.perUnit;
+          const asPieces = !!part || pr.pieces;
+          const otherPieces = pr.parts.filter((x) => x.packCode !== part?.packCode).reduce((n, x) => n + x.qty * x.pieces, 0);
+          const after = !asPieces ? typed : part ? pr.own * perUnit + otherPieces + typed * part.pieces : typed * perUnit + otherPieces;
+          const need = asPieces ? entryLine.qty * perUnit : entryLine.qty;
+          const extra = Math.round((after - need) * 1000) / 1000;
+          return (
           <form noValidate className="grid scroll-mb-4 gap-3 rounded-xl border-2 border-star bg-star-soft/40 p-3" onSubmit={(e) => { e.preventDefault(); void savePick(); }} aria-label={`ใส่จำนวนที่หยิบได้ ${entryLine.name}`}>
             <div className="grid gap-0.5">
               <p className="font-semibold break-words">{entryLine.name}</p>
-              <p className="text-sm text-muted-foreground"><span className="font-mono">{entryLine.packCode || lineCode(entryLine)}</span> · สั่ง <b className="text-foreground tabular-nums">{formatQty(entryLine.qty)}</b> {entryLine.unit}{picked(entryLine) > 0 && <> · หยิบไว้แล้ว <b className="text-foreground tabular-nums">{formatQty(picked(entryLine))}</b></>}</p>
+              <p className="text-sm text-muted-foreground"><span className="font-mono">{part?.packCode ?? (entryLine.packCode || lineCode(entryLine))}</span> · สั่ง <b className="text-foreground tabular-nums">{formatQty(entryLine.qty)}</b> {entryLine.unit}{asPieces && <> = <b className="text-foreground tabular-nums">{formatQty(need)}</b> ชิ้น</>}{pr.got > 0 && <> · หยิบไว้แล้ว <b className="text-foreground tabular-nums">{formatQty(pr.got)}</b>{pr.pieces && ' ชิ้น'}</>}</p>
             </div>
-            <label htmlFor="prep-qty" className="text-sm font-medium">จำนวนที่หยิบได้ ({entryLine.unit})</label>
+            {part && (
+              <p className="flex items-start gap-2 rounded-lg bg-kibble-soft px-3 py-2 text-sm"><RefreshCcwIcon className="mt-0.5 size-4 shrink-0 text-kibble-ink" aria-hidden />
+                <span>ให้ <b>{part.unit}</b> แทน <b>{entryLine.unit}</b> · 1 {part.unit} = {formatQty(part.pieces)} ชิ้น ระบบนับรวมเป็นชิ้นให้</span>
+              </p>
+            )}
+            {!part && pr.parts.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-muted-foreground">ให้ขนาดอื่นแทนไว้:</span>
+                {pr.parts.map((x) => (
+                  <Button key={x.packCode} type="button" size="touch" variant="outline" className="h-11" disabled={busy}
+                    onClick={() => startEntry(entryLine, { packCode: x.packCode, unit: x.unit, pieces: x.pieces, perUnit: pr.perUnit })}>
+                    {x.unit} {formatQty(x.qty)} · แก้
+                  </Button>
+                ))}
+              </div>
+            )}
+            <label htmlFor="prep-qty" className="text-sm font-medium">จำนวนที่หยิบได้ ({unit})</label>
             <QtyStepper id="prep-qty" label="จำนวนที่หยิบได้" min={0} value={entry.value} onChange={(value) => setEntry({ ...entry, value })} disabled={busy} />
+            {asPieces && <p className="text-sm text-muted-foreground tabular-nums">รวมเป็น <b className="text-foreground">{formatQty(after)}</b> จาก {formatQty(need)} ชิ้น</p>}
+            {extra > 0 && <p role="status" className="text-sm font-semibold text-rose">เกินยอดสั่ง {formatQty(extra)} {asPieces ? 'ชิ้น' : entryLine.unit} ตรวจของอีกครั้งก่อนบันทึก</p>}
             <div className="flex flex-wrap gap-2">
               <Button type="submit" size="touch" className="bg-star text-on-star hover:bg-star/90" disabled={busy}>{busy ? <LoaderCircleIcon className="animate-spin" /> : <CheckIcon />}บันทึกจำนวน</Button>
               <Button type="button" size="touch" variant="ghost" onClick={() => { setEntry(null); scanRef.current?.focus(); }}>ยกเลิก</Button>
             </div>
           </form>
-        )}
+          );
+        })()}
         <Notice message={message} />
 
-        {/* รายการเรียงตาม SKU_CODE เหมือนใบจัดที่พิมพ์ ครบ = ฟ้า, หยิบได้บางส่วน = คาราเมล แตะแถวเพื่อใส่จำนวนเอง (ต้องรับจัดก่อน) */}
+        {/* รายการเรียงตาม SKU_CODE เหมือนใบจัดที่พิมพ์ ครบ = ฟ้า, ขาด = คาราเมล, เกิน = แดง แตะแถวเพื่อใส่จำนวนเอง (ต้องรับจัดก่อน) */}
         <ul className="grid gap-2" aria-label="รายการที่ต้องหยิบ">
           {lines.map((l) => {
-            const got = picked(l);
-            const done = got >= l.qty;
-            const partial = got > 0 && !done;
+            const pr = prog(l);
+            const isOver = pr.diff > 0;
+            const done = pr.diff === 0;
+            const partial = pr.got > 0 && pr.diff < 0;
             const editing = entry?.lineNo === l.lineNo;
+            const unitWord = pr.pieces ? 'ชิ้น' : l.unit;
             return (
               <li key={l.lineNo}>
                 <button type="button" disabled={!canPick} onClick={() => startEntry(l)}
-                  aria-label={`${l.name} สั่ง ${formatQty(l.qty)} ${l.unit} หยิบแล้ว ${formatQty(got)}${canPick ? ' แตะเพื่อใส่จำนวน' : ''}`}
+                  aria-label={`${l.name} สั่ง ${formatQty(l.qty)} ${l.unit} หยิบแล้ว ${formatQty(pr.got)}${pr.pieces ? ` จาก ${formatQty(pr.need)} ชิ้น` : ''}${isOver ? ` เกิน ${formatQty(pr.diff)} ${unitWord}` : ''}${canPick ? ' แตะเพื่อใส่จำนวน' : ''}`}
                   className={cn('flex min-h-16 w-full items-center gap-3 rounded-xl border-2 px-3 py-2 text-left transition-[border-color,background-color] outline-none focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-default',
-                    editing ? 'border-star bg-star-soft/40' : done ? 'border-sky/50 bg-sky-soft' : partial ? 'border-kibble/55 bg-kibble-soft/60' : 'border-card-edge bg-card enabled:hover:border-star/60 enabled:active:border-star')}>
-                  <span aria-hidden className={cn('grid size-8 shrink-0 place-items-center rounded-full border-2', done ? 'border-sky bg-sky text-background' : partial ? 'border-kibble text-kibble-ink' : 'border-dashed border-muted-foreground/50')}>
-                    {done ? <CheckIcon className="size-5 stroke-[3]" /> : partial ? <span className="size-3 rounded-full bg-current" /> : null}
+                    editing ? 'border-star bg-star-soft/40' : isOver ? 'border-rose/60 bg-rose-soft' : done ? 'border-sky/50 bg-sky-soft' : partial ? 'border-kibble/55 bg-kibble-soft/60' : 'border-card-edge bg-card enabled:hover:border-star/60 enabled:active:border-star')}>
+                  <span aria-hidden className={cn('grid size-8 shrink-0 place-items-center rounded-full border-2', isOver ? 'border-rose bg-rose text-background' : done ? 'border-sky bg-sky text-background' : partial ? 'border-kibble text-kibble-ink' : 'border-dashed border-muted-foreground/50')}>
+                    {isOver ? <PlusIcon className="size-5 stroke-[3]" /> : done ? <CheckIcon className="size-5 stroke-[3]" /> : partial ? <span className="size-3 rounded-full bg-current" /> : null}
                   </span>
                   <span className="grid min-w-0 flex-1 gap-0.5">
                     <span className={cn('font-medium break-words', done && 'text-muted-foreground')}>{l.name}</span>
                     <span className="font-mono text-xs break-all text-muted-foreground">{l.packCode || lineCode(l) || 'ไม่มีรหัส'}</span>
+                    {pr.parts.length > 0 && (
+                      <span className="flex flex-wrap items-center gap-1 text-xs text-kibble-ink">
+                        <RefreshCcwIcon className="size-3.5" aria-hidden />ให้แทน {pr.parts.map((x) => `${x.unit} ${formatQty(x.qty)}`).join(' · ')}{pr.own > 0 && ` · ${l.unit} ${formatQty(pr.own)}`}
+                      </span>
+                    )}
+                    {isOver && <span className="text-xs font-semibold text-rose">เกินยอดสั่ง {formatQty(pr.diff)} {unitWord}</span>}
                   </span>
                   <span className="shrink-0 text-right">
                     <span className="block font-heading text-xl font-semibold tabular-nums">
-                      <span className={cn(done ? 'text-sky' : partial ? 'text-kibble-ink' : 'text-muted-foreground')}>{formatQty(got)}</span>
-                      <span className="text-base text-muted-foreground">/{formatQty(l.qty)}</span>
+                      <span className={cn(isOver ? 'text-rose' : done ? 'text-sky' : partial ? 'text-kibble-ink' : 'text-muted-foreground')}>{formatQty(pr.got)}</span>
+                      <span className="text-base text-muted-foreground">/{formatQty(pr.need)}</span>
                     </span>
-                    <ToneChip tone={unitTone(unitPieces(l.unit))} className="mt-0.5">{l.unit}</ToneChip>
+                    <ToneChip tone={pr.pieces ? 'mint' : unitTone(unitPieces(l.unit))} className="mt-0.5">{pr.pieces ? 'ชิ้น' : l.unit}</ToneChip>
                   </span>
                 </button>
               </li>
@@ -400,8 +487,9 @@ export function PreparePage() {
         <div className="fixed inset-x-0 bottom-0 z-10 border-t border-on-sky/10 bg-brand px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)] text-brand-foreground shadow-dock lg:hidden print:hidden">
           <div className="mx-auto grid max-w-3xl gap-2">
             <p className="text-sm" aria-live="polite">
-              หยิบครบ <span className={cn('font-heading font-semibold tabular-nums', !left && 'text-on-sky-mint')}>{lines.length - left}/{lines.length}</span> รายการ
+              หยิบครบ <span className={cn('font-heading font-semibold tabular-nums', exact === lines.length && 'text-on-sky-mint')}>{exact}/{lines.length}</span> รายการ
               {left > 0 && <> · ยังขาด <span className="font-semibold text-on-sky-kibble tabular-nums">{left}</span></>}
+              {over > 0 && <> · เกิน <span className="font-semibold text-on-sky-rose tabular-nums">{over}</span></>}
             </p>
             {doneArea(true)}
           </div>
@@ -416,7 +504,7 @@ export function PreparePage() {
     if (confirm === 'done') {
       return (
         <div role="alert" className={cn('grid w-full gap-2 rounded-xl p-3', onSky ? 'bg-on-sky/10 ring-1 ring-on-sky-kibble/40' : 'border-2 border-kibble/55 bg-kibble-soft')}>
-          <p className="text-sm font-medium">ยังหยิบไม่ครบ {left} รายการ ยืนยันส่งตรวจเลยไหม (ผู้ตรวจจะเห็นว่าขาดตอนตรวจ)</p>
+          <p className="text-sm font-medium">{[left > 0 && `ยังหยิบไม่ครบ ${left} รายการ`, over > 0 && `หยิบเกินยอดสั่ง ${over} รายการ`].filter(Boolean).join(' และ ')} ยืนยันส่งตรวจเลยไหม (ผู้ตรวจจะเห็นตอนตรวจ)</p>
           <div className="grid grid-cols-2 gap-2 sm:flex">
             <Button size="touch" className="bg-star text-on-star hover:bg-star/90" disabled={busy} onClick={() => void act({ action: 'done' })}>ยืนยัน จัดเสร็จ</Button>
             <Button size="touch" variant="outline" className={cn(onSky && 'border-on-sky/30 bg-transparent text-brand-foreground hover:bg-on-sky/10 hover:text-brand-foreground')} onClick={() => setConfirm(null)}>กลับไปจัดต่อ</Button>
@@ -425,7 +513,7 @@ export function PreparePage() {
       );
     }
     return (
-      <Button size="touch" className={cn('bg-star text-on-star hover:bg-star/90', onSky && 'w-full')} disabled={busy} onClick={() => (left ? setConfirm('done') : void act({ action: 'done' }))}>
+      <Button size="touch" className={cn('bg-star text-on-star hover:bg-star/90', onSky && 'w-full')} disabled={busy} onClick={() => (left || over ? setConfirm('done') : void act({ action: 'done' }))}>
         {busy ? <LoaderCircleIcon className="animate-spin" /> : <Sparkle className="size-5" />}จัดเสร็จ ส่งตรวจ
       </Button>
     );
