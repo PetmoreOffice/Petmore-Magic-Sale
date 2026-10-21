@@ -130,7 +130,7 @@ export class ReportsService {
       { header: 'เลขออเดอร์', key: 'id', width: 16 }, { header: 'วันที่รับออเดอร์', key: 'date', width: 14, fmt: 'dd/mm/yyyy' },
       { header: 'บันทึกเมื่อ', key: 'createdAt', width: 17, fmt: 'dd/mm/yyyy hh:mm' }, { header: 'รหัสผู้สั่ง', key: 'customerCode', width: 11 },
       { header: 'ผู้สั่ง', key: 'customerName', width: 32 }, { header: 'เบอร์ติดต่อ', key: 'phone', width: 14 }, { header: 'ผู้จด', key: 'createdBy', width: 18 },
-      { header: 'สถานะตรวจ', key: 'status', width: 18 }, { header: 'ผู้เบิกสินค้า', key: 'picker', width: 16 },
+      { header: 'สถานะตรวจ', key: 'status', width: 18 }, { header: 'ผู้ตรวจ', key: 'picker', width: 16 },
       { header: 'รายการที่', key: 'lineNo', width: 9 }, { header: 'รหัสสินค้า', key: 'sku', width: 20 }, { header: 'บาร์โค้ด', key: 'packCode', width: 20 },
       { header: 'ชื่อสินค้า', key: 'name', width: 44 }, { header: 'หน่วย', key: 'unit', width: 12 },
       { header: 'จำนวนสั่ง', key: 'qty', width: 10, fmt: QTY_FMT }, { header: 'นับได้', key: 'actual', width: 10, fmt: QTY_FMT },

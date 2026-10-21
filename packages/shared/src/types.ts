@@ -391,6 +391,8 @@ export interface OrderLine extends OrderLineInput {
 export type PickCheckStatus = 'MATCH' | 'PARTIAL' | 'MISMATCH';
 /** แท็บในหน้าตรวจของเบิก: PENDING = ยังไม่ตรวจ, MATCH = ตรวจผ่าน (รวม PARTIAL) */
 export type CheckFilter = 'PENDING' | 'MATCH' | 'MISMATCH' | 'ALL';
+/** ล็อกตรวจของเบิกหลุดเองเมื่อเครื่องที่ถือล็อกไม่ส่งสัญญาณนานเกินนี้ (หน้าตรวจส่งทุก 1 นาที) */
+export const CHECK_LOCK_MINUTES = 5;
 
 /** จำนวนในแต่ละแท็บ + เวลาสร้างของออเดอร์ล่าสุดที่เห็นได้ (ISO, ว่าง = ยังไม่มี) หน้าตรวจของเบิกใช้รู้ว่ามีออเดอร์ใหม่เข้ามา */
 export type CheckCounts = Record<CheckFilter, number> & { latest: string };
@@ -448,7 +450,8 @@ export interface PickCheck {
  */
 export interface PickCheckInput {
   requestId: string;
-  pickerName: string;
+  /** ไม่ใช้แล้ว เซิร์ฟเวอร์ใส่ชื่อบัญชีผู้ตรวจเอง */
+  pickerName?: string;
   note: string;
   /** ของในคลังไม่พอ ผู้ตรวจยืนยันให้ตามที่มี ใช้ได้เมื่อมีแค่รายการขาด (ไม่มีเกิน/ของนอกออเดอร์) */
   shortStock?: boolean;
@@ -531,4 +534,6 @@ export interface SalesOrder {
   lines: OrderLine[];
   /** ผลตรวจของเบิกครั้งล่าสุด (null = ยังไม่ตรวจ) */
   lastCheck: { id: string; status: PickCheckStatus; createdAt: string; pickerName: string } | null;
+  /** มีคนเปิดตรวจออเดอร์นี้อยู่ (ล็อกกันตรวจทับ หมดอายุเองถ้าเครื่องเงียบเกิน CHECK_LOCK_MINUTES) null = ว่าง */
+  checkLock: { byId: string; byName: string; at: string } | null;
 }

@@ -1,7 +1,7 @@
-import { BadRequestException, Body, ConflictException, Controller, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
+import { BadRequestException, Body, ConflictException, Controller, Delete, ForbiddenException, Get, Injectable, Module, NotFoundException, Param, Post, Query } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import { Prisma } from '@prisma/client';
-import { CheckCounts, CheckFilter, Customer, hiddenFromOrders, MANUAL_REASONS, MAX_ORDER_LINES, ORDER_HIDDEN_OWNERS, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, SalesOrder, SessionUser } from '@petmore/shared';
+import { CHECK_LOCK_MINUTES, CheckCounts, CheckFilter, Customer, hiddenFromOrders, MANUAL_REASONS, MAX_ORDER_LINES, ORDER_HIDDEN_OWNERS, OrderInput, packCodeForQty, Paged, PickCheck, PickCheckInput, PickCheckPart, SalesOrder, SessionUser } from '@petmore/shared';
 import { CurrentUser, RequirePermissions } from '../auth/decorators';
 import { audit, nextDocNo, optionalText, requireRequestId, requireText } from '../common/util';
 import { isUniqueViolation, PrismaService } from '../prisma/prisma.service';
@@ -48,6 +48,11 @@ export class OrdersService {
     return this.seesAll(user) ? {} : { createdById: user.id };
   }
 
+  /** ล็อกตรวจที่ยังไม่หมดอายุ (เครื่องที่ถือล็อกส่งสัญญาณภายใน CHECK_LOCK_MINUTES) */
+  private lockAlive(order: { checkLockById: string; checkLockAt: Date | null }) {
+    return !!order.checkLockById && !!order.checkLockAt && order.checkLockAt.getTime() > Date.now() - CHECK_LOCK_MINUTES * 60_000;
+  }
+
   private dto(order: StoredOrder): SalesOrder {
     return {
       id: order.id, customerCode: order.customerCode, customerName: order.customerName, customerType: order.customerType as SalesOrder['customerType'],
@@ -60,7 +65,39 @@ export class OrdersService {
       lastCheck: order.checks[0]
         ? { id: order.checks[0].id, status: order.checks[0].status as PickCheck['status'], createdAt: order.checks[0].createdAt.toISOString(), pickerName: order.checks[0].pickerName }
         : null,
+      checkLock: this.lockAlive(order) ? { byId: order.checkLockById, byName: order.checkLockByName, at: order.checkLockAt!.toISOString() } : null,
     };
+  }
+
+  /**
+   * เปิดตรวจ/ส่งสัญญาณว่ายังตรวจอยู่: ได้ล็อกเมื่อว่าง เป็นของตัวเอง หรือของคนอื่นที่หมดอายุแล้ว
+   * force = รับช่วงต่อจากคนที่ค้างไว้ (ลงประวัติ) ใช้ updateMany ที่มีเงื่อนไข สองเครื่องกดพร้อมกันได้เครื่องเดียว
+   */
+  async lockCheck(user: SessionUser, orderId: string, force = false): Promise<SalesOrder> {
+    const order = await this.get(user, orderId);
+    const stale = new Date(Date.now() - CHECK_LOCK_MINUTES * 60_000);
+    const free: Prisma.SalesOrderWhereInput[] = [{ checkLockById: '' }, { checkLockById: user.id }, { checkLockAt: null }, { checkLockAt: { lt: stale } }];
+    const taken = await this.prisma.$transaction(async (tx) => {
+      const r = await tx.salesOrder.updateMany({
+        where: { id: orderId, ...(force ? {} : { OR: free }) },
+        data: { checkLockById: user.id, checkLockByName: user.displayName, checkLockAt: new Date() },
+      });
+      if (r.count && force && order.checkLock && order.checkLock.byId !== user.id) {
+        await audit(tx, 'checkLock', orderId, user.id, { byId: order.checkLock.byId, byName: order.checkLock.byName }, { action: 'takeover' });
+      }
+      return r.count;
+    });
+    if (!taken) {
+      const now = await this.get(user, orderId);
+      throw new ConflictException(`${now.checkLock?.byName || 'คนอื่น'} กำลังตรวจออเดอร์นี้อยู่ ตรวจทับกันไม่ได้ ถ้าคนเดิมไม่อยู่แล้ว กด "รับช่วงต่อ"`);
+    }
+    return this.get(user, orderId);
+  }
+
+  /** ปิดหน้าตรวจ/เปลี่ยนออเดอร์: ปล่อยล็อกเฉพาะของตัวเอง */
+  async unlockCheck(user: SessionUser, orderId: string): Promise<{ ok: true }> {
+    await this.prisma.salesOrder.updateMany({ where: { id: orderId, checkLockById: user.id }, data: { checkLockById: '', checkLockByName: '', checkLockAt: null } });
+    return { ok: true };
   }
 
   private checkDto(check: StoredCheck): PickCheck {
@@ -145,12 +182,18 @@ export class OrdersService {
     const save = () => this.prisma.$transaction(async (tx) => {
       // ล็อกออเดอร์: ตรวจซ้ำพร้อมกันสองเครื่อง สถานะในออเดอร์ต้องตรงกับผลตรวจที่บันทึกทีหลังสุด
       await tx.$queryRaw`SELECT 1 FROM "SalesOrder" WHERE id = ${orderId} FOR UPDATE`;
+      // มีคนรับช่วงตรวจไประหว่างนี้: ไม่บันทึกทับผลของเขา
+      const lock = await tx.salesOrder.findUnique({ where: { id: orderId }, select: { checkLockById: true, checkLockByName: true, checkLockAt: true } });
+      if (lock && lock.checkLockById !== user.id && this.lockAlive(lock)) {
+        throw new ConflictException(`${lock.checkLockByName || 'คนอื่น'} รับช่วงตรวจออเดอร์นี้ไปแล้ว ผลตรวจของคุณยังไม่ถูกบันทึก`);
+      }
       const checkId = await nextDocNo(tx, 'CK');
       await tx.pickCheck.create({ data: {
-        id: checkId, requestId, orderId, status, pickerName: optionalText(input.pickerName, 100), note: optionalText(input.note, 1000), checkedById: user.id,
+        id: checkId, requestId, orderId, status, pickerName: user.displayName.slice(0, 100), note: optionalText(input.note, 1000), checkedById: user.id,
         lines: { create: lines.map((l, i) => ({ ...l, lineNo: i + 1 })) },
       } });
-      await tx.salesOrder.update({ where: { id: orderId }, data: { checkStatus: status } });
+      // บันทึกแล้วปล่อยล็อก (ตรวจใหม่ต้องเปิดตรวจอีกครั้ง)
+      await tx.salesOrder.update({ where: { id: orderId }, data: { checkStatus: status, checkLockById: '', checkLockByName: '', checkLockAt: null } });
       await audit(tx, 'pickCheck', checkId, user.id, null, { orderId, status, lines: lines.length });
       return checkId;
     });
@@ -345,6 +388,14 @@ export class OrdersController {
   @Get(':id')
   @RequirePermissions('orders.view', 'orders.create', 'picks.check', 'returns.create')
   get(@CurrentUser() user: SessionUser, @Param('id') id: string) { return this.orders.get(user, id); }
+
+  @Post(':id/check-lock')
+  @RequirePermissions('picks.check')
+  lockCheck(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body() body: { force?: boolean }) { return this.orders.lockCheck(user, id, body?.force === true); }
+
+  @Delete(':id/check-lock')
+  @RequirePermissions('picks.check')
+  unlockCheck(@CurrentUser() user: SessionUser, @Param('id') id: string) { return this.orders.unlockCheck(user, id); }
 
   @Get(':id/checks/last')
   @RequirePermissions('orders.view', 'picks.check')

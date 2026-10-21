@@ -2,10 +2,10 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   AlertTriangleIcon, ArrowLeftIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClipboardCheckIcon, ClipboardListIcon, LoaderCircleIcon,
-  HandIcon, MinusIcon, PackageIcon, PackageXIcon, PencilIcon, PlusIcon, RotateCcwIcon, SparklesIcon, StarIcon, Trash2Icon, XIcon,
+  HandIcon, LockIcon, MinusIcon, PackageIcon, PackageXIcon, PencilIcon, PlusIcon, RotateCcwIcon, SparklesIcon, StarIcon, Trash2Icon, UserRoundIcon, XIcon,
 } from 'lucide-react';
 import { cn } from 'cn';
-import { MANUAL_REASONS, type CheckCounts, type CheckFilter, type OrderLine, type Paged, type PickCheck, type Product, type ProductPack, type SalesOrder } from '@petmore/shared';
+import { CHECK_LOCK_MINUTES, MANUAL_REASONS, type CheckCounts, type CheckFilter, type OrderLine, type Paged, type PickCheck, type Product, type ProductPack, type SalesOrder } from '@petmore/shared';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -13,13 +13,14 @@ import { NativeSelect, NativeSelectOption } from '@/components/ui/native-select'
 import { ScanFeedback, ScanInput, ScanInputHandle } from '@/components/ScanInput';
 import { SparkBurst, SparkBurstHandle } from '@/components/SparkBurst';
 import { BoothName, CheckBadge, Field, KeepIds, Message, Notice } from '@/components/wms';
-import { MagicStage, Medallion, TONES, type Tone, SlotSparkles, SPELL_SLOT } from '@/components/magic';
+import { MagicStage, Medallion, Seal, TONES, type Tone, SlotSparkles, SPELL_SLOT } from '@/components/magic';
 import BlurText from '@/components/BlurText';
 import SpotlightCard from '@/components/SpotlightCard';
 import StarBorder from '@/components/StarBorder';
 import { defaultPack, formatQty, packSizes } from '@/lib/packs';
 import { scrollToStart, touchInput } from '@/lib/touch';
-import { api, ApiError, formatTime, newRequestId } from '../api';
+import { api, ApiError, formatTime, getToken, newRequestId } from '../api';
+import { useAuth } from '../auth';
 
 /** ของที่เอามาแต่ไม่ตรงกับรายการไหนในออเดอร์ */
 interface Extra {
@@ -52,13 +53,12 @@ interface Draft {
   /** รายการที่นับเอง (ไม่ได้สแกน) และเหตุผล ปกติต้องสแกนเท่านั้น */
   manual: Record<number, string>;
   extras: Extra[];
-  pickerName: string;
   note: string;
   requestId: string;
 }
 // เก็บความคืบหน้าการตรวจแต่ละออเดอร์ไว้ ออกไปหน้าอื่นแล้วกลับมานับต่อได้ (ไม่เขียนลงเครื่อง)
 const drafts = new Map<string, Draft>();
-const emptyDraft = (): Draft => ({ counts: {}, subs: {}, manual: {}, extras: [], pickerName: '', note: '', requestId: newRequestId() });
+const emptyDraft = (): Draft => ({ counts: {}, subs: {}, manual: {}, extras: [], note: '', requestId: newRequestId() });
 
 const num = (v: string | undefined) => {
   const n = Number(v ?? '');
@@ -124,8 +124,19 @@ const TABS: { key: CheckFilter; label: string; tone: Tone; empty: string }[] = [
  * ตรวจ: ทุกรายการเป็นดาวบนท้องฟ้าด้านบน ครบแล้วดาวสว่างทอง เกินเป็นแดง รายการที่ยังไม่ครบอยู่บนสุด ที่ครบแล้วยุบลงล่าง
  * สแกนทีละชิ้นหรือกด −/+ พิมพ์จำนวนเอง บาร์โค้ดหลายตัวของขนาดเดียวกันนับรวมกัน หยิบผิดขนาด/ของนอกออเดอร์แยกเป็นรายการแดง
  */
+/** ปล่อยล็อกตรวจ (ปิดหน้า/เปลี่ยนออเดอร์) ไม่รอผล keepalive = ส่งได้แม้กำลังปิดแท็บ */
+function releaseLock(id: string) {
+  fetch(`/api/orders/${encodeURIComponent(id)}/check-lock`, { method: 'DELETE', keepalive: true, headers: { Authorization: `Bearer ${getToken()}` } }).catch(() => undefined);
+}
+
 export function CheckPage() {
+  const { user } = useAuth();
   const [order, setOrder] = useState<SalesOrder | null>(null);
+  // มีคนอื่นเปิดตรวจออเดอร์นี้อยู่: ตรวจทับไม่ได้ (รับช่วงต่อได้)
+  const [locked, setLocked] = useState<{ byName: string } | null>(null);
+  const [takeover, setTakeover] = useState(false);
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [result, setResult] = useState<PickCheck | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
@@ -203,7 +214,53 @@ export function CheckPage() {
   // จำความคืบหน้าของออเดอร์ที่กำลังตรวจ
   useEffect(() => { if (order && !result) drafts.set(order.id, draft); }, [order, draft, result]);
 
+  // ระหว่างตรวจ: ส่งสัญญาณทุก 1 นาทีว่ายังตรวจอยู่ (ล็อกไม่หลุด) ปิดแท็บ = ปล่อยล็อก
+  const orderId = order?.id;
+  useEffect(() => {
+    if (!orderId || locked || result) return;
+    const beat = () => {
+      api<SalesOrder>(`/orders/${encodeURIComponent(orderId)}/check-lock`, { method: 'POST', body: {} })
+        .catch((e) => { if (e instanceof ApiError && e.status === 409) void showLocked(orderId, errorText(e)); });
+    };
+    const timer = setInterval(beat, 60_000);
+    const leave = () => releaseLock(orderId);
+    window.addEventListener('pagehide', leave);
+    return () => { clearInterval(timer); window.removeEventListener('pagehide', leave); };
+  }, [orderId, locked, result]);
+  // ออกจากหน้าตรวจไปเมนูอื่น: ปล่อยล็อกของออเดอร์ที่เปิดค้าง
+  useEffect(() => () => { const o = orderRef.current; if (o && !lockedRef.current) releaseLock(o.id); }, []);
+
+  /** ขอล็อกตรวจ force = รับช่วงต่อจากคนที่ค้างไว้ */
+  async function claim(id: string, force = false) {
+    try {
+      const fresh = await api<SalesOrder>(`/orders/${encodeURIComponent(id)}/check-lock`, { method: 'POST', body: { force } });
+      if (orderRef.current?.id !== id) return releaseLock(id);
+      setOrder(fresh); setLocked(null); setTakeover(false);
+      if (force) setMessage({ kind: 'info', text: `รับช่วงตรวจ ${id} แล้ว สแกนต่อได้เลย` });
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409) return showLocked(id, errorText(e));
+      setMessage({ kind: 'error', text: errorText(e) });
+    }
+  }
+
+  async function showLocked(id: string, text: string) {
+    let byName = '';
+    try {
+      const now = await api<SalesOrder>('/orders/' + encodeURIComponent(id));
+      if (orderRef.current?.id === id) setOrder(now);
+      byName = now.checkLock?.byName ?? '';
+    } catch { /* แสดงข้อความจากเซิร์ฟเวอร์อย่างเดียว */ }
+    if (orderRef.current?.id !== id) return;
+    setLocked({ byName });
+    setTakeover(false);
+    setMessage({ kind: 'error', text });
+  }
+
   function openOrder(o: SalesOrder) {
+    if (orderRef.current && orderRef.current.id !== o.id && !lockedRef.current) releaseLock(orderRef.current.id);
+    orderRef.current = o;
+    setLocked(null); setTakeover(false);
+    void claim(o.id);
     setOpened((old) => (old.has(o.id) ? old : new Set([...old, o.id])));
     setOrder(o);
     const kept = drafts.get(o.id);
@@ -216,6 +273,8 @@ export function CheckPage() {
   }
 
   function closeOrder() {
+    if (order && !locked && !result) releaseLock(order.id);
+    setLocked(null); setTakeover(false);
     setOrder(null);
     setResult(null);
     setMessage(null);
@@ -276,6 +335,7 @@ export function CheckPage() {
 
   async function handleScan(code: string): Promise<ScanFeedback> {
     if (!order) return findOrder(code);
+    if (locked) return { ok: false, text: `${locked.byName || 'คนอื่น'} กำลังตรวจออเดอร์นี้อยู่ ตรวจทับไม่ได้` };
     const value = code.trim();
     setMessage(null);
     // สินค้ากรอกเอง: จับจากรหัสที่กรอกไว้ในออเดอร์
@@ -370,7 +430,6 @@ export function CheckPage() {
         method: 'POST',
         body: {
           requestId: draft.requestId,
-          pickerName: draft.pickerName,
           note: draft.note,
           shortStock,
           lines: [
@@ -386,10 +445,12 @@ export function CheckPage() {
       });
       drafts.delete(order.id);
       setResult(saved);
-      setOrder({ ...order, lastCheck: { id: saved.id, status: saved.status, createdAt: saved.createdAt, pickerName: saved.pickerName } });
+      setOrder({ ...order, checkLock: null, lastCheck: { id: saved.id, status: saved.status, createdAt: saved.createdAt, pickerName: saved.pickerName } });
       window.scrollTo({ top: 0 });
     } catch (e) {
-      setMessage({ kind: 'error', text: errorText(e) });
+      // มีคนรับช่วงตรวจไประหว่างนี้: เปลี่ยนเป็นหน้าล็อก ไม่ให้สแกนต่อ
+      if (e instanceof ApiError && e.status === 409 && errorText(e).includes('รับช่วงตรวจ')) void showLocked(order.id, errorText(e));
+      else setMessage({ kind: 'error', text: errorText(e) });
     } finally {
       setSaving(false);
     }
@@ -398,9 +459,10 @@ export function CheckPage() {
   function recheck() {
     if (!order) return;
     drafts.delete(order.id);
-    setDraft({ ...emptyDraft(), pickerName: draft.pickerName });
+    setDraft(emptyDraft());
     setResult(null);
     setLastLine(null);
+    void claim(order.id);
   }
 
   // ---------- ผลตรวจ ----------
@@ -488,7 +550,7 @@ export function CheckPage() {
                               <BoothName code={o.customerCode} name={o.customerName} />
                             </strong>
                             <span className="text-sm text-muted-foreground">{o.id} · {o.date} · {o.lines.length} รายการ</span>
-                            <span><CheckBadge check={o.lastCheck} /></span>
+                            <span className="flex flex-wrap gap-1.5"><CheckBadge check={o.lastCheck} />{o.checkLock && o.checkLock.byId !== user?.id && <Seal tone="kibble" state="half">กำลังตรวจ · {o.checkLock.byName}</Seal>}</span>
                           </span>
                           <ChevronRightIcon className="size-5 shrink-0 text-muted-foreground" aria-hidden />
                         </button>
@@ -506,6 +568,40 @@ export function CheckPage() {
             </>
           )}
         </section>
+      </div>
+    );
+  }
+
+  // ---------- มีคนอื่นตรวจอยู่ ----------
+  if (locked) {
+    return (
+      <div className="mx-auto grid max-w-3xl gap-4">
+        <MagicStage className="grid gap-3">
+          <div className="-mr-2 flex items-center justify-between gap-2">
+            <p className="font-mono text-sm text-brand-foreground/75">{order.id}</p>
+            <Button variant="ghost" size="touch" className="px-3 text-brand-foreground hover:bg-on-sky/10 hover:text-brand-foreground" onClick={closeOrder}><ArrowLeftIcon />เปลี่ยนออเดอร์</Button>
+          </div>
+          <p className="font-heading text-lg leading-snug font-semibold break-words"><BoothName code={order.customerCode} name={order.customerName} /></p>
+          <div role="status" className="grid gap-2 rounded-xl bg-on-sky/10 p-3 ring-1 ring-on-sky-kibble/40">
+            <p className="flex items-center gap-2 font-semibold"><LockIcon className="size-5 shrink-0 text-on-sky-kibble" aria-hidden /><span>มีคนกำลังตรวจออเดอร์นี้อยู่ <span className="whitespace-nowrap">ตรวจทับกันไม่ได้</span></span></p>
+            <p className="text-sm text-brand-foreground/85"><b className="whitespace-nowrap">{locked.byName || 'คนอื่น'}</b> เปิดตรวจอยู่ ถ้าเขาปิดหน้าตรวจหรือบันทึกผลแล้ว กดเปิดออเดอร์นี้อีกครั้งได้เลย ล็อกหลุดเองถ้าเครื่องนั้นเงียบเกิน {CHECK_LOCK_MINUTES} นาที</p>
+            {takeover ? (
+              <div className="grid gap-2">
+                <p className="text-sm">รับช่วงตรวจจาก <b className="whitespace-nowrap">{locked.byName || 'คนอื่น'}</b>? เครื่องนั้นจะบันทึกผลตรวจออเดอร์นี้ไม่ได้อีก</p>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="touch" className="bg-star text-on-star hover:bg-star/90" onClick={() => void claim(order.id, true)}>ยืนยัน รับช่วงต่อ</Button>
+                  <Button size="touch" variant="ghost" className="text-brand-foreground hover:bg-on-sky/10 hover:text-brand-foreground" onClick={() => setTakeover(false)}>ยกเลิก</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <Button size="touch" variant="outline" className="border-on-sky/30 bg-transparent text-brand-foreground hover:bg-on-sky/10 hover:text-brand-foreground" onClick={() => setTakeover(true)}><HandIcon />รับช่วงต่อ</Button>
+                <Button size="touch" variant="ghost" className="text-brand-foreground hover:bg-on-sky/10 hover:text-brand-foreground" onClick={() => void claim(order.id)}><RotateCcwIcon />ลองเปิดอีกครั้ง</Button>
+                <span className="text-xs text-brand-foreground/75">รับช่วงต่อเฉพาะกรณีคนเดิมไม่อยู่แล้ว</span>
+              </div>
+            )}
+          </div>
+        </MagicStage>
       </div>
     );
   }
@@ -592,9 +688,11 @@ export function CheckPage() {
           </div>
           <Card className="order-4 lg:order-2">
             <CardContent className="grid gap-3">
-              <Field id="check-picker" label="ชื่อผู้เบิกสินค้า">
-                <Input id="check-picker" className={touchInput} value={draft.pickerName} maxLength={100} placeholder="เช่น สมชาย" onChange={(e) => setDraft((d) => ({ ...d, pickerName: e.target.value }))} />
-              </Field>
+              {/* ผู้ตรวจ = บัญชีที่เข้าสู่ระบบ เซิร์ฟเวอร์ใส่ชื่อให้เอง */}
+              <div className="grid gap-1.5">
+                <span className="text-sm font-medium">ผู้ตรวจสินค้า</span>
+                <p className="flex min-h-12 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-base break-words"><UserRoundIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />{user?.displayName}</p>
+              </div>
               <Field id="check-note" label="หมายเหตุ (ถ้ามี)">
                 <Input id="check-note" className={touchInput} value={draft.note} maxLength={1000} placeholder="เช่น ของขาดเพราะสต็อกหมด" onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))} />
               </Field>
@@ -864,7 +962,7 @@ function CheckResult({ check, order }: { check: PickCheck; order: SalesOrder }) 
             {reduce || check.status !== 'MATCH'
               ? <p className="font-heading text-2xl font-semibold sm:text-3xl"><KeepIds text={title} /></p>
               : <BlurText text={title} delay={120} animateBy="words" direction="top" className="justify-center font-heading text-2xl font-semibold sm:text-3xl" />}
-            <p className="text-brand-foreground/80"><BoothName code={order.customerCode} name={order.customerName} />{check.pickerName && ` · เบิกโดย ${check.pickerName}`} · {formatTime(check.createdAt)}</p>
+            <p className="text-brand-foreground/80"><BoothName code={order.customerCode} name={order.customerName} />{check.pickerName && ` · ตรวจโดย ${check.pickerName}`} · {formatTime(check.createdAt)}</p>
           </div>
         </MagicStage>
       </div>

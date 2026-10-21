@@ -192,6 +192,10 @@ model SalesOrder {
   returns       ProductReturn[]
   /// ผลตรวจของเบิกครั้งล่าสุด '' = ยังไม่ตรวจ, MATCH, PARTIAL, MISMATCH (เก็บซ้ำไว้กรองรายการได้เร็ว)
   checkStatus   String         @default("")
+  /// ล็อกตรวจของเบิก: คนที่เปิดตรวจอยู่ (ว่าง = ไม่มีใคร) และเวลาส่งสัญญาณล่าสุด เกิน CHECK_LOCK_MINUTES = หลุดเอง
+  checkLockById   String    @default("")
+  checkLockByName String    @default("")
+  checkLockAt     DateTime?
   /// การจัดสินค้า '' = รอจัด, PREPARING = กำลังจัด, READY = จัดเสร็จ รอตรวจ (หน้า /prepare)
   prepStatus    String         @default("")
   prepById      String         @default("")
@@ -230,7 +234,7 @@ model PickCheck {
   requestId   String          @unique
   order       SalesOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId     String
-  /// ชื่อคนที่เบิกของมาส่ง (อาจไม่มีบัญชีในระบบ)
+  /// ชื่อบัญชีผู้ตรวจตอนบันทึก (ตั้งแต่ 2026-10-21 เซิร์ฟเวอร์ใส่เอง ก่อนหน้านั้นเป็นชื่อคนเบิกที่พิมพ์เอง)
   pickerName  String          @default("")
   /// MATCH = ครบตรงทุกรายการ, PARTIAL = ของในคลังไม่พอ ยืนยันให้ตามที่มี (ขาดอย่างเดียว), MISMATCH = ขาด/เกิน/ผิด ต้องตามแก้
   status      String
