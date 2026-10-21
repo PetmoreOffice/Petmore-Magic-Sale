@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import type { SalesOrder } from '@petmore/shared';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { BoothName, CheckBadge, PrepBadge } from '@/components/wms';
+import { BoothName, CheckBadge } from '@/components/wms';
 import { OrderBarcode } from '@/components/OrderBarcode';
 import { lineCode, sortBySkuCode } from '@/lib/doc-lines';
 import { formatQty } from '@/lib/packs';
@@ -16,7 +16,7 @@ export function OrderReceipt({ order, actions }: { order: SalesOrder; actions: R
           <div className="grid gap-1">
             <CardTitle role="heading" aria-level={2}>{order.id}</CardTitle>
             <CardDescription>บันทึกเมื่อ {formatTime(order.createdAt)}</CardDescription>
-            <span className="flex flex-wrap gap-1.5 print:hidden"><PrepBadge prep={order.prep} /><CheckBadge check={order.lastCheck} /></span>
+            <span className="flex flex-wrap gap-1.5 print:hidden"><CheckBadge check={order.lastCheck} /></span>
           </div>
           {/* คนตรวจของเบิกสแกนบาร์โค้ดนี้เปิดออเดอร์ได้ทันที */}
           <OrderBarcode id={order.id} />

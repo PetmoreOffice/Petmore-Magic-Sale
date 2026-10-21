@@ -1,7 +1,7 @@
 import { ReactNode, RefObject } from 'react';
 import { AlertCircleIcon, CheckCircle2Icon, MinusIcon, PlusIcon } from 'lucide-react';
 import { cn } from 'cn';
-import { boothOf, type OrderPrep, type PackSize, type PickCheckStatus, type StockStatus } from '@petmore/shared';
+import { boothOf, type PackSize, type PickCheckStatus, type StockStatus } from '@petmore/shared';
 import { breakdown, formatQty } from '@/lib/packs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Seal, SlotSparkles, SPELL_SLOT } from '@/components/magic';
@@ -168,9 +168,3 @@ export function CheckBadge({ check, className }: { check: { status: PickCheckSta
   return <Seal tone="rose" state="broken" className={className}>ตรวจแล้ว ไม่ตรงออเดอร์</Seal>;
 }
 
-/** ป้ายการจัดสินค้า: รอจัด (เส้นประ) / กำลังจัด · ชื่อคนจัด (ครึ่ง คาราเมล) / จัดเสร็จ (เต็ม ฟ้า) */
-export function PrepBadge({ prep, className }: { prep: Pick<OrderPrep, 'status' | 'byName'> | null | undefined; className?: string }) {
-  if (!prep?.status) return <Seal tone="muted" state="outline" className={className}>รอจัด</Seal>;
-  if (prep.status === 'PREPARING') return <Seal tone="kibble" state="half" className={className}>กำลังจัด{prep.byName && ` · ${prep.byName}`}</Seal>;
-  return <Seal tone="sky" className={className}>จัดเสร็จ</Seal>;
-}

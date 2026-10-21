@@ -1,6 +1,6 @@
 import type { ComponentType } from 'react';
 import {
-  ArrowLeftRightIcon, BoxesIcon, ClipboardCheckIcon, ClipboardListIcon, FileSpreadsheetIcon, PackageCheckIcon, PackagePlusIcon, QrCodeIcon, Undo2Icon, UsersIcon,
+  ArrowLeftRightIcon, BoxesIcon, ClipboardCheckIcon, ClipboardListIcon, FileSpreadsheetIcon, PackagePlusIcon, QrCodeIcon, Undo2Icon, UsersIcon,
 } from 'lucide-react';
 import type { Permission } from '@petmore/shared';
 import type { Tone } from '@/components/magic';
@@ -25,7 +25,6 @@ export interface AppMenu {
 
 export const APP_MENUS: AppMenu[] = [
   { group: 'sales', to: '/orders', related: ['orders.view', 'orders.create'], title: 'ออเดอร์สินค้า', short: 'ออเดอร์', hint: 'จดออเดอร์ของผู้สั่ง และดูออเดอร์ย้อนหลัง', perms: ['orders.view', 'orders.create'], icon: ClipboardListIcon, tone: 'star' },
-  { group: 'sales', to: '/prepare', related: ['picks.prepare'], title: 'จัดสินค้า', short: 'จัดสินค้า', hint: 'รับออเดอร์จากคิว หยิบของตามใบจัด แล้วส่งตรวจ', perms: ['picks.prepare'], icon: PackageCheckIcon, tone: 'sky' },
   { group: 'sales', to: '/check', related: ['picks.check'], title: 'ตรวจของเบิก', short: 'ตรวจของเบิก', hint: 'สแกนของที่เบิกมา เทียบกับออเดอร์ว่าครบ ขาด หรือเกิน', perms: ['picks.check'], icon: ClipboardCheckIcon, tone: 'mint' },
   { group: 'sales', to: '/returns', related: ['returns.create'], title: 'คืนสินค้า', short: 'คืนสินค้า', hint: 'คืนของที่เบิกเกิน ขายไม่หมด หรือปิดงานอีเวนต์', perms: ['returns.create'], icon: Undo2Icon, tone: 'kibble' },
   { group: 'warehouse', to: '/receive', related: ['receive.view', 'receive.create', 'receive.print'], title: 'รับสินค้า', short: 'รับสินค้า', hint: 'สแกนสินค้าและ Location เพิ่มสต็อก', perms: ['receive.create'], icon: PackagePlusIcon, tone: 'sky' },

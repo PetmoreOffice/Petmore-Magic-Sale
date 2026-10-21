@@ -15,7 +15,6 @@ import { MovePage } from './pages/Move';
 const LabelsPage = lazy(() => import('./pages/Labels').then((m) => ({ default: m.LabelsPage })));
 const OrdersPage = lazy(() => import('./pages/Orders').then((m) => ({ default: m.OrdersPage })));
 const CheckPage = lazy(() => import('./pages/Check').then((m) => ({ default: m.CheckPage })));
-const PreparePage = lazy(() => import('./pages/Prepare').then((m) => ({ default: m.PreparePage })));
 const ReturnsPage = lazy(() => import('./pages/Returns').then((m) => ({ default: m.ReturnsPage })));
 const UsersPage = lazy(() => import('./pages/Users').then((m) => ({ default: m.UsersPage })));
 const ExportPage = lazy(() => import('./pages/Export').then((m) => ({ default: m.ExportPage })));
@@ -117,7 +116,6 @@ export function App() {
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
       <Route path="/" element={<Guard title="เมนูหลัก" wide><MenuPage /></Guard>} />
       <Route path="/orders" element={<Guard title="ออเดอร์สินค้า" wide perms={['orders.view', 'orders.create']}><Suspense fallback={<p role="status">กำลังเปิดหน้าออเดอร์…</p>}><OrdersPage /></Suspense></Guard>} />
-      <Route path="/prepare" element={<Guard title="จัดสินค้า" wide perms={['picks.prepare']}><Suspense fallback={<p role="status">กำลังเปิดหน้าจัดสินค้า…</p>}><PreparePage /></Suspense></Guard>} />
       <Route path="/check" element={<Guard title="ตรวจของเบิก" wide perms={['picks.check']}><Suspense fallback={<p role="status">กำลังเปิดหน้าตรวจของเบิก…</p>}><CheckPage /></Suspense></Guard>} />
       <Route path="/returns" element={<Guard title="คืนสินค้า" wide perms={['returns.create']}><Suspense fallback={<p role="status">กำลังเปิดหน้าคืนสินค้า…</p>}><ReturnsPage /></Suspense></Guard>} />
       <Route path="/receive" element={<Guard title="รับสินค้า" perms={['receive.create']}><ReceivePage /></Guard>} />
