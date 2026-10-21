@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   AlertTriangleIcon, ArrowLeftIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClipboardCheckIcon, ClipboardListIcon, LoaderCircleIcon,
-  HandIcon, MinusIcon, PackageIcon, PackageXIcon, PencilIcon, PlusIcon, RotateCcwIcon, SparklesIcon, StarIcon, Trash2Icon, XIcon,
+  HandIcon, MinusIcon, PackageCheckIcon, PackageIcon, PackageXIcon, PencilIcon, PlusIcon, RotateCcwIcon, SparklesIcon, StarIcon, Trash2Icon, XIcon,
 } from 'lucide-react';
 import { cn } from 'cn';
 import { MANUAL_REASONS, type CheckCounts, type CheckFilter, type OrderLine, type Paged, type PickCheck, type Product, type ProductPack, type SalesOrder } from '@petmore/shared';
@@ -18,6 +18,7 @@ import BlurText from '@/components/BlurText';
 import SpotlightCard from '@/components/SpotlightCard';
 import StarBorder from '@/components/StarBorder';
 import { defaultPack, formatQty, packSizes } from '@/lib/packs';
+import { prepProgress } from '@/lib/prep';
 import { scrollToStart, touchInput } from '@/lib/touch';
 import { api, ApiError, formatTime, newRequestId } from '../api';
 
@@ -83,6 +84,16 @@ function tally(d: Draft, line: OrderLine): Tally {
   };
 }
 /** จำนวนชิ้น (UTQ_QTY) ต่อ 1 หน่วยของรหัส: บาร์โค้ดขนาดบรรจุ หรือรหัส SKU = หน่วยนับสต็อก */
+/** ยอดที่คนจัดหยิบไว้ ให้ผู้ตรวจเทียบกับของที่สแกน (ยังไม่มีคนรับจัด = ไม่แสดง) */
+type Packed = { text: string; off: boolean };
+function packedNote(order: SalesOrder, l: OrderLine): Packed | null {
+  if (!order.prep.status) return null;
+  const p = prepProgress(order, l);
+  const subs = p.parts.length ? ` (ให้ ${p.parts.map((x) => `${x.unit} ${formatQty(x.qty)}`).join(' · ')} แทน)` : '';
+  const state = p.diff === 0 ? 'ครบ' : p.diff > 0 ? `เกิน ${formatQty(p.diff)}` : p.got ? `ขาด ${formatQty(-p.diff)}` : 'ไม่ได้หยิบ';
+  return { text: `คนจัดหยิบ ${formatQty(p.got)}/${formatQty(p.need)} ${p.pieces ? 'ชิ้น' : l.unit}${subs} · ${state}`, off: p.diff !== 0 };
+}
+
 function piecesOf(p: Product, code: string): number | null {
   const pack = p.packs?.find((x) => x.code === code);
   if (pack) return pack.unitQty;
@@ -343,8 +354,9 @@ export function CheckPage() {
     if (!order) return null;
     const rows = order.lines.map((l) => {
       const t = tally(draft, l);
-      return { line: l, tally: t, state: lineState(t.actual, t.expected) };
+      return { line: l, tally: t, state: lineState(t.actual, t.expected), packed: packedNote(order, l) };
     });
+    const prepDiffs = order.lines.map((l) => prepProgress(order, l).diff);
     const extras = draft.extras.filter((x) => num(x.qty) > 0);
     return {
       rows,
@@ -357,6 +369,9 @@ export function CheckPage() {
       total: rows.length,
       allMatch: rows.every((r) => r.state === 'MATCH') && !extras.length,
       started: rows.some((r) => r.state !== 'PENDING') || extras.length > 0,
+      // คนจัดแจ้งไว้ (แสดงเมื่อมีคนรับจัดแล้ว)
+      prepShort: order.prep.status ? prepDiffs.filter((d) => d < 0).length : 0,
+      prepOver: order.prep.status ? prepDiffs.filter((d) => d > 0).length : 0,
     };
   }, [order, draft]);
 
@@ -545,6 +560,7 @@ export function CheckPage() {
       total={r.tally.actual}
       totalUnit={r.tally.pieces ? r.tally.unit : undefined}
       hint={r.tally.pieces ? `สั่ง ${formatQty(r.line.qty)} ${r.line.unit} = ${formatQty(r.tally.expected)} ชิ้น` : undefined}
+      packed={r.packed}
       value={draft.counts[r.line.lineNo] ?? ''}
       onChange={(value) => setCount(r.line.lineNo, value)}
       manualReason={draft.manual[r.line.lineNo]}
@@ -583,6 +599,15 @@ export function CheckPage() {
     <div className="grid gap-4 pb-32 lg:pb-0">
       <ScanInput ref={scanRef} label={`สแกนของที่เบิกมา · ${order.id}`} placeholder="สแกนสินค้าทีละชิ้น" onScan={handleScan} autoFocus disabled={saving} />
       <Notice message={message} />
+      {(v.prepShort > 0 || v.prepOver > 0) && (
+        <p className="flex items-start gap-2 rounded-xl border-2 border-kibble/55 bg-kibble-soft px-3 py-2 text-sm">
+          <PackageCheckIcon className="mt-0.5 size-4 shrink-0 text-kibble-ink" aria-hidden />
+          <span>
+            <b>{order.prep.status === 'READY' ? 'คนจัดแจ้งไว้' : 'ยังจัดไม่เสร็จ'}{order.prep.byName && ` (${order.prep.byName})`}:</b>{' '}
+            {[v.prepShort > 0 && `หยิบไม่ครบ ${v.prepShort} รายการ`, v.prepOver > 0 && `หยิบเกินยอดสั่ง ${v.prepOver} รายการ`].filter(Boolean).join(' · ')} ดูบรรทัด "คนจัดหยิบ" ในแต่ละรายการ
+          </span>
+        </p>
+      )}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_23rem] lg:items-start">
         {/* มือถือ: ท้องฟ้า → รายการ → ชื่อคนเบิก/หมายเหตุ (สแกนแล้วเห็นรายการทันที) / จอคอม: รายการซ้าย แผงสรุปติดขวา */}
@@ -744,7 +769,7 @@ function SaveArea({ allMatch, shortOnly, started, saving, confirming, problems, 
  * แถวตรวจ 1 รายการ: สถานะซ้าย ยอดนับได้/ควรได้ตัวใหญ่ขวา แถวที่ครบแล้วย่อเหลือบรรทัดเดียว
  * ต้องสแกนเป็นหลัก: ปกติกดได้แค่ − (แก้สแกนเกิน) จะกด + หรือพิมพ์จำนวนต้องกด "นับเอง" แล้วเลือกเหตุผลก่อน
  */
-function CheckRow({ id, name, code, unit, expected, total, totalUnit, value, onChange, manualReason, onManual, onRemove, extra, hint, highlight, compact, disabled, children }: {
+function CheckRow({ id, name, code, unit, expected, total, totalUnit, value, onChange, manualReason, onManual, packed, onRemove, extra, hint, highlight, compact, disabled, children }: {
   id: string; name: string; code: string; unit: string; expected: number; value: string; onChange: (v: string) => void;
   /** ยอดรวมรวมขนาดที่ให้แทน (ไม่ส่ง = ใช้ค่าในช่อง) */
   total?: number;
@@ -754,6 +779,8 @@ function CheckRow({ id, name, code, unit, expected, total, totalUnit, value, onC
   manualReason?: string;
   /** เปิด/เลิกนับเอง ไม่ส่ง = นับเองไม่ได้ (ของนอกออเดอร์) */
   onManual?: (reason: string | null) => void;
+  /** ยอดที่คนจัดหยิบไว้ (หน้าจัดสินค้า) */
+  packed?: Packed | null;
   onRemove?: () => void; extra?: string; hint?: string; highlight?: boolean; compact?: boolean; disabled?: boolean; children?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
@@ -775,6 +802,11 @@ function CheckRow({ id, name, code, unit, expected, total, totalUnit, value, onC
           <p className={cn('font-medium break-words', compact && !editing && 'line-clamp-1 text-sm')}>{name}</p>
           {(!compact || editing) && <p className="text-sm text-muted-foreground"><span className="font-mono">{code}</span> · {unit}</p>}
           {hint && <p className={cn('text-sm', extra ? 'text-rose' : 'text-muted-foreground')}>{hint}</p>}
+          {packed && (!compact || editing || packed.off) && (
+            <p className={cn('flex items-start gap-1 text-xs', packed.off ? 'font-semibold text-kibble-ink' : 'text-muted-foreground')}>
+              <PackageCheckIcon className="mt-px size-3.5 shrink-0" aria-hidden />{packed.text}
+            </p>
+          )}
         </div>
         <div className="shrink-0 text-right">
           <p className={cn('font-heading font-semibold tabular-nums', compact && !editing ? 'text-base' : 'text-2xl')}>

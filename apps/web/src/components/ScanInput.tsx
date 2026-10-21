@@ -24,6 +24,8 @@ interface Props {
 
 export interface ScanInputHandle {
   focus: () => void;
+  /** ส่งรหัสเข้าคิวสแกนเหมือนยิงที่ช่องนี้ (เช่น หัวสแกนยิงใส่ช่องจำนวนในแถว) ผลแสดงบนเวทีนี้ */
+  scan: (code: string) => void;
 }
 
 type Flash = { kind: 'ok' | 'error'; key: number } | null;
@@ -63,7 +65,7 @@ export const ScanInput = forwardRef<ScanInputHandle, Props>(function ScanInput(
     setFocused(document.activeElement === input);
   }
 
-  useImperativeHandle(ref, () => ({ focus: () => focusInput() }), []);
+  useImperativeHandle(ref, () => ({ focus: () => focusInput(), scan: (code: string) => submit(code) }), []);
 
   function submit(raw: string) {
     const code = raw.trim();
