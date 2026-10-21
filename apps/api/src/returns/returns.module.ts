@@ -163,7 +163,7 @@ export class ReturnsService {
       if (!lines.length) throw new BadRequestException('ยังไม่มีของที่คืน สแกนหรือใส่จำนวนอย่างน้อย 1 รายการ');
       const returnId = await nextDocNo(tx, 'RT');
       await tx.productReturn.create({ data: {
-        id: returnId, requestId, orderId, reason: input.reason, returnerName: optionalText(input.returnerName, 100), note: optionalText(input.note, 1000),
+        id: returnId, requestId, orderId, reason: input.reason, returnerName: user.displayName.slice(0, 100), note: optionalText(input.note, 1000),
         createdById: user.id, lines: { create: lines },
       } });
       await audit(tx, 'productReturn', returnId, user.id, null, { orderId, reason: input.reason, lines: lines.length });

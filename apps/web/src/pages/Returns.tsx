@@ -2,7 +2,7 @@ import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useReducedMotion } from 'motion/react';
 import {
   ArrowLeftIcon, CheckIcon, ChevronRightIcon, ClipboardListIcon, LoaderCircleIcon, MinusIcon, PackageOpenIcon, PencilLineIcon, PlusIcon,
-  PrinterIcon, SearchIcon, SparklesIcon, Trash2Icon, Undo2Icon, XIcon,
+  PrinterIcon, SearchIcon, SparklesIcon, Trash2Icon, Undo2Icon, UserRoundIcon, XIcon,
 } from 'lucide-react';
 import { cn } from 'cn';
 import {
@@ -22,6 +22,7 @@ import SpotlightCard from '@/components/SpotlightCard';
 import { defaultPack, formatQty } from '@/lib/packs';
 import { scrollToStart, touchInput } from '@/lib/touch';
 import { api, ApiError, formatTime, newRequestId } from '../api';
+import { useAuth } from '../auth';
 
 type Condition = 'good' | 'damaged';
 
@@ -80,6 +81,7 @@ const freeDraft = (): Draft => ({ rows: [], reason: 'EVENT_END', returnerName: '
  * ตอนนี้บันทึกประวัติอย่างเดียว ไม่เปลี่ยนยอดสต็อก
  */
 export function ReturnsPage() {
+  const { user } = useAuth();
   const [mode, setMode] = useState<'home' | 'order' | 'free'>('home');
   const [order, setOrder] = useState<SalesOrder | null>(null);
   const [summary, setSummary] = useState<OrderReturnSummary | null>(null);
@@ -297,7 +299,7 @@ export function ReturnsPage() {
           requestId: draft.requestId,
           orderId: mode === 'order' ? order?.id ?? null : null,
           reason: draft.reason,
-          returnerName: draft.returnerName,
+          returnerName: '',
           note: draft.note,
           lines: draft.rows.filter((r) => num(r.good) + num(r.damaged) > 0).map((r) => ({
             orderLineNo: r.orderLineNo, sku: r.sku, packCode: r.packCode, itemCode: r.itemCode, name: r.name, unit: r.unit, goodQty: num(r.good), damagedQty: num(r.damaged),
@@ -492,9 +494,11 @@ export function ReturnsPage() {
                   ))}
                 </div>
               </div>
-              <Field id="ret-name" label="ชื่อผู้คืนสินค้า">
-                <Input id="ret-name" className={touchInput} value={draft.returnerName} maxLength={100} placeholder="เช่น สมชาย" onChange={(e) => setDraft((d) => ({ ...d, returnerName: e.target.value }))} />
-              </Field>
+              {/* ผู้รับคืน = บัญชีที่เข้าสู่ระบบ เซิร์ฟเวอร์ใส่ชื่อให้เอง (เหมือนผู้ตรวจในหน้าตรวจของเบิก) */}
+              <div className="grid gap-1.5">
+                <span className="text-sm font-medium">ผู้รับคืนสินค้า</span>
+                <p className="flex min-h-12 items-center gap-2 rounded-md border border-input bg-muted/40 px-3 text-base break-words"><UserRoundIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />{user?.displayName}</p>
+              </div>
               <Field id="ret-note" label="หมายเหตุ (ถ้ามี)">
                 <Input id="ret-note" className={touchInput} value={draft.note} maxLength={1000} placeholder="เช่น ถุงขาดจากหน้างาน" onChange={(e) => setDraft((d) => ({ ...d, note: e.target.value }))} />
               </Field>
@@ -692,7 +696,7 @@ function ReturnReceipt({ ret, celebrate, actions }: { ret: ProductReturn; celebr
             {ret.orderId && <div className="sm:col-span-2"><dt className="text-muted-foreground">ผู้สั่ง</dt><dd className="font-heading text-lg font-semibold break-words">{ret.customerName || 'ไม่ได้ระบุ'}</dd></div>}
             <div><dt className="text-muted-foreground">คืนจาก</dt><dd className="break-words">{ret.orderId ? <>ออเดอร์ <span className="font-mono">{ret.orderId}</span></> : 'ใบคืนอิสระ (ไม่ผูกออเดอร์)'}</dd></div>
             <div><dt className="text-muted-foreground">สาเหตุที่คืน</dt><dd>{RETURN_REASONS[ret.reason]}</dd></div>
-            <div><dt className="text-muted-foreground">ผู้คืนสินค้า</dt><dd className="break-words">{ret.returnerName || 'ไม่ได้ระบุ'}</dd></div>
+            <div><dt className="text-muted-foreground">ผู้รับคืนสินค้า</dt><dd className="break-words">{ret.returnerName || 'ไม่ได้ระบุ'}</dd></div>
           </dl>
           {/* แบบเดียวกับใบจัดสินค้า: เรียงตาม SKU_CODE ช่องท้ายไว้เขียนจำนวนที่ตรวจรับคืนจริง */}
           <table className="w-full text-sm">

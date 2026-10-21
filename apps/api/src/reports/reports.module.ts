@@ -163,7 +163,7 @@ export class ReportsService {
     const ret = sheet('ใบคืน', [
       { header: 'เลขใบคืน', key: 'id', width: 16 }, { header: 'บันทึกเมื่อ', key: 'createdAt', width: 17, fmt: 'dd/mm/yyyy hh:mm' },
       { header: 'จากออเดอร์', key: 'orderId', width: 16 }, { header: 'ผู้สั่ง', key: 'customerName', width: 32 }, { header: 'สาเหตุ', key: 'reason', width: 14 },
-      { header: 'ผู้คืนสินค้า', key: 'returner', width: 16 }, { header: 'ผู้บันทึก', key: 'createdBy', width: 18 },
+      { header: 'ผู้รับคืน', key: 'returner', width: 16 }, { header: 'ผู้บันทึก', key: 'createdBy', width: 18 },
       { header: 'รหัสสินค้า', key: 'sku', width: 20 }, { header: 'บาร์โค้ด', key: 'packCode', width: 20 }, { header: 'ชื่อสินค้า', key: 'name', width: 44 },
       { header: 'หน่วย', key: 'unit', width: 12 }, { header: 'ของดี', key: 'good', width: 9, fmt: QTY_FMT }, { header: 'เสียหาย', key: 'damaged', width: 9, fmt: QTY_FMT },
       { header: 'หมายเหตุ', key: 'note', width: 30 },
