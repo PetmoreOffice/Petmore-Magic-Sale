@@ -1,6 +1,7 @@
 /**
  * บูธในงาน Petmore Magic Sale 30 ต.ค. – 1 พ.ย. 2569 (แปลน updated 25/08/2569) ผูกกับรหัสผู้สั่งใน dbo.ICCAT
  * ชื่อบริษัทที่แสดงดึงจากทะเบียนผู้สั่ง (sync จาก ICCAT) ไม่เก็บซ้ำที่นี่ ตรวจชื่อกับผู้ใช้แล้ว 2026-10-18
+ * บูธ 10/15 สลับตามบัญชี Booth10/Booth15 ที่ผู้ใช้ตั้งตามแปลนจริง (ผู้ใช้ยืนยัน 2026-10-29)
  */
 export const EVENT_BOOTHS: readonly { booth: number; customerCode: string }[] = [
   { booth: 1, customerCode: '002' }, // เพอร์เฟค คอมพาเนียน กรุ๊ป (Me-O)
@@ -12,12 +13,12 @@ export const EVENT_BOOTHS: readonly { booth: number; customerCode: string }[] = 
   { booth: 7, customerCode: '067' }, // ไฮคิวผลิตภัณฑ์อาหาร (VIF)
   { booth: 8, customerCode: '023' }, // ชอว์ ปิง (Pramy)
   { booth: 9, customerCode: '079' }, // เคเค เพาเวอร์ ช็อป (Powercat)
-  { booth: 10, customerCode: '070' }, // เพ็ท เซอร์เคิล
+  { booth: 10, customerCode: '121' }, // บีเจซี คอนซูเมอร์ (Ginno)
   { booth: 11, customerCode: '147' }, // โบทานี เพ็ทแคร์ (Bravo Boss)
   { booth: 12, customerCode: '165' }, // อมตะ888 (ChicChic)
   { booth: 13, customerCode: '089' }, // เว็ทซิโนว่า (VFcore)
   { booth: 14, customerCode: '164' }, // โฟร์ พี กรุ๊ป (mypaws)
-  { booth: 15, customerCode: '121' }, // บีเจซี คอนซูเมอร์ (Ginno)
+  { booth: 15, customerCode: '070' }, // เพ็ท เซอร์เคิล
   { booth: 16, customerCode: '009' }, // ซิลลิค ฟาร์มา (MARIA)
   { booth: 17, customerCode: '158' }, // วินดา เทรดดิ้ง 2017 (Cheer Share)
   { booth: 18, customerCode: '043' }, // เพ็ท โฟกัส (Dog n Joy)
