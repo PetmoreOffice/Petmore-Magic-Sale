@@ -73,14 +73,15 @@ export class OrdersService {
    * เปิดตรวจ/ส่งสัญญาณว่ายังตรวจอยู่: ได้ล็อกเมื่อว่าง เป็นของตัวเอง หรือของคนอื่นที่หมดอายุแล้ว
    * force = รับช่วงต่อจากคนที่ค้างไว้ (ลงประวัติ) ใช้ updateMany ที่มีเงื่อนไข สองเครื่องกดพร้อมกันได้เครื่องเดียว
    */
-  async lockCheck(user: SessionUser, orderId: string, force = false): Promise<SalesOrder> {
+  async lockCheck(user: SessionUser, orderId: string, token: string, force = false): Promise<SalesOrder> {
+    const lockToken = requireRequestId(token);
     const order = await this.get(user, orderId);
     const stale = new Date(Date.now() - CHECK_LOCK_MINUTES * 60_000);
-    const free: Prisma.SalesOrderWhereInput[] = [{ checkLockById: '' }, { checkLockById: user.id }, { checkLockAt: null }, { checkLockAt: { lt: stale } }];
+    const free: Prisma.SalesOrderWhereInput[] = [{ checkLockById: '' }, { checkLockById: user.id, checkLockToken: lockToken }, { checkLockAt: null }, { checkLockAt: { lt: stale } }];
     const taken = await this.prisma.$transaction(async (tx) => {
       const r = await tx.salesOrder.updateMany({
         where: { id: orderId, ...(force ? {} : { OR: free }) },
-        data: { checkLockById: user.id, checkLockByName: user.displayName, checkLockAt: new Date() },
+        data: { checkLockById: user.id, checkLockToken: lockToken, checkLockByName: user.displayName, checkLockAt: new Date() },
       });
       if (r.count && force && order.checkLock && order.checkLock.byId !== user.id) {
         await audit(tx, 'checkLock', orderId, user.id, { byId: order.checkLock.byId, byName: order.checkLock.byName }, { action: 'takeover' });
@@ -95,8 +96,8 @@ export class OrdersService {
   }
 
   /** ปิดหน้าตรวจ/เปลี่ยนออเดอร์: ปล่อยล็อกเฉพาะของตัวเอง */
-  async unlockCheck(user: SessionUser, orderId: string): Promise<{ ok: true }> {
-    await this.prisma.salesOrder.updateMany({ where: { id: orderId, checkLockById: user.id }, data: { checkLockById: '', checkLockByName: '', checkLockAt: null } });
+  async unlockCheck(user: SessionUser, orderId: string, token: string): Promise<{ ok: true }> {
+    await this.prisma.salesOrder.updateMany({ where: { id: orderId, checkLockById: user.id, checkLockToken: requireRequestId(token) }, data: { checkLockById: '', checkLockToken: '', checkLockByName: '', checkLockAt: null } });
     return { ok: true };
   }
 
@@ -183,9 +184,31 @@ export class OrdersService {
       // ล็อกออเดอร์: ตรวจซ้ำพร้อมกันสองเครื่อง สถานะในออเดอร์ต้องตรงกับผลตรวจที่บันทึกทีหลังสุด
       await tx.$queryRaw`SELECT 1 FROM "SalesOrder" WHERE id = ${orderId} FOR UPDATE`;
       // มีคนรับช่วงตรวจไประหว่างนี้: ไม่บันทึกทับผลของเขา
-      const lock = await tx.salesOrder.findUnique({ where: { id: orderId }, select: { checkLockById: true, checkLockByName: true, checkLockAt: true } });
-      if (lock && lock.checkLockById !== user.id && this.lockAlive(lock)) {
-        throw new ConflictException(`${lock.checkLockByName || 'คนอื่น'} รับช่วงตรวจออเดอร์นี้ไปแล้ว ผลตรวจของคุณยังไม่ถูกบันทึก`);
+      const lock = await tx.salesOrder.findUnique({ where: { id: orderId }, select: { checkLockById: true, checkLockToken: true, checkLockByName: true, checkLockAt: true } });
+      if (!lock || !this.lockAlive(lock) || lock.checkLockById !== user.id || lock.checkLockToken !== requireRequestId(input.lockToken)) {
+        throw new ConflictException('ล็อกตรวจหมดอายุหรือถูกเปิดตรวจจากเครื่องอื่น เปิดออเดอร์หรือรับช่วงต่อก่อนบันทึก');
+      }
+      // ใช้ row lock เดียวกับการคืน ป้องกันยอดตรวจใหม่ต่ำกว่ายอดคืนสะสม
+      const returned = await tx.returnLine.groupBy({
+        by: ['orderLineNo', 'inPieces'], where: { ret: { orderId }, orderLineNo: { not: null } }, _sum: { goodQty: true, damagedQty: true },
+      });
+      for (const line of lines) {
+        if (line.orderLineNo === null) continue;
+        const back = returned.filter((r) => r.orderLineNo === line.orderLineNo);
+        if (!back.length) continue;
+        let per = line.unitPieces;
+        if (!per && back.some((r) => r.inPieces)) {
+          const product = await tx.product.findUnique({ where: { sku: line.sku } });
+          const pack = product ? await resolvePack(tx, product, line.packCode) : null;
+          if (!pack || pack.unitQty <= 0) throw new ConflictException('ไม่สามารถเทียบหน่วยสินค้าที่คืนแล้วได้ ตรวจทะเบียนก่อนตรวจใหม่');
+          per = new Prisma.Decimal(pack.unitQty);
+        }
+        const total = back.reduce((sum, r) => {
+          const qty = new Prisma.Decimal(r._sum.goodQty ?? 0).plus(r._sum.damagedQty ?? 0);
+          return sum.plus(per && !r.inPieces ? qty.times(per) : qty);
+        }, new Prisma.Decimal(0));
+        const taken = line.actualPieces ?? (per ? line.actualQty.times(per) : line.actualQty);
+        if (taken.lessThan(total)) throw new ConflictException(`${line.name} มียอดคืนแล้ว ยอดตรวจใหม่ต้องไม่น้อยกว่ายอดคืน`);
       }
       const checkId = await nextDocNo(tx, 'CK');
       await tx.pickCheck.create({ data: {
@@ -193,7 +216,7 @@ export class OrdersService {
         lines: { create: lines.map((l, i) => ({ ...l, lineNo: i + 1 })) },
       } });
       // บันทึกแล้วปล่อยล็อก (ตรวจใหม่ต้องเปิดตรวจอีกครั้ง)
-      await tx.salesOrder.update({ where: { id: orderId }, data: { checkStatus: status, checkLockById: '', checkLockByName: '', checkLockAt: null } });
+      await tx.salesOrder.update({ where: { id: orderId }, data: { checkStatus: status, checkLockById: '', checkLockToken: '', checkLockByName: '', checkLockAt: null } });
       await audit(tx, 'pickCheck', checkId, user.id, null, { orderId, status, lines: lines.length });
       return checkId;
     });
@@ -391,11 +414,11 @@ export class OrdersController {
 
   @Post(':id/check-lock')
   @RequirePermissions('picks.check')
-  lockCheck(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body() body: { force?: boolean }) { return this.orders.lockCheck(user, id, body?.force === true); }
+  lockCheck(@CurrentUser() user: SessionUser, @Param('id') id: string, @Body() body: { force?: boolean; lockToken?: string }) { return this.orders.lockCheck(user, id, body?.lockToken ?? '', body?.force === true); }
 
   @Delete(':id/check-lock')
   @RequirePermissions('picks.check')
-  unlockCheck(@CurrentUser() user: SessionUser, @Param('id') id: string) { return this.orders.unlockCheck(user, id); }
+  unlockCheck(@CurrentUser() user: SessionUser, @Param('id') id: string, @Query('lockToken') token?: string) { return this.orders.unlockCheck(user, id, token ?? ''); }
 
   @Get(':id/checks/last')
   @RequirePermissions('orders.view', 'picks.check')

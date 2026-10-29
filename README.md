@@ -108,6 +108,14 @@ npm run dev:https -w @petmore/web
 - คลัง / โซน / Location (สร้างและแก้ไข)
 - รายการใบรับย้อนหลัง พิมพ์ใบรับ ประวัติ Movement
 
-ยังไม่มีชุดทดสอบอัตโนมัติใน repo (ทดสอบด้วยสคริปต์ชั่วคราวกับฐานข้อมูลในเครื่อง แล้วลบข้อมูลทดสอบทิ้ง)
+ชุดทดสอบหน้าร้าน (หลัง `npm run build` และรัน Prisma migration บนฐานพัฒนาแล้ว):
+
+```bash
+node scripts/test-orders.cjs
+node scripts/test-storefront.cjs
+node scripts/test-drafts.cjs
+```
+
+สองชุดแรกยอมรับเฉพาะฐานพัฒนา `localhost:5432/petmore_wms` และ rollback ข้อมูลทดสอบทั้งหมด ชุดสุดท้ายตรวจการแยกร่างตามบัญชีและล้างร่างเมื่อออกจากระบบโดยไม่ใช้ฐานข้อมูล
 
 ยังไม่รองรับ: ทำงานตอนไม่มีเน็ต (offline)

@@ -194,6 +194,7 @@ model SalesOrder {
   checkStatus   String         @default("")
   /// ล็อกตรวจของเบิก: คนที่เปิดตรวจอยู่ (ว่าง = ไม่มีใคร) และเวลาส่งสัญญาณล่าสุด เกิน CHECK_LOCK_MINUTES = หลุดเอง
   checkLockById   String    @default("")
+  checkLockToken  String    @default("")
   checkLockByName String    @default("")
   checkLockAt     DateTime?
   /// การจัดสินค้า '' = รอจัด, PREPARING = กำลังจัด, READY = จัดเสร็จ รอตรวจ (หน้า /prepare)

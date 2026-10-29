@@ -1,0 +1,1 @@
+ALTER TABLE "SalesOrder" ADD COLUMN "checkLockToken" TEXT NOT NULL DEFAULT '';

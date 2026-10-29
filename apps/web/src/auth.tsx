@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import type { LoginResult, Permission, SessionUser } from '@petmore/shared';
 import { api, getToken, setToken, setUnauthorizedHandler } from './api';
+import { clearDrafts } from './lib/drafts';
 
 interface AuthState {
   user: SessionUser | null;
@@ -30,7 +31,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    setUnauthorizedHandler(() => setUser(null));
+    setUnauthorizedHandler(() => { clearDrafts(); setUser(null); });
     refresh().finally(() => setReady(true));
     // ตรวจสิทธิ์ใหม่ทุก 60 วินาที และเมื่อกลับมาที่แท็บ (เหมือนระบบเดิม)
     const timer = setInterval(() => !document.hidden && refresh(), 60_000);
@@ -45,6 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // beforeEnter: หน้าเข้าสู่ระบบเล่นจังหวะ "ตรวจบัตร" ให้จบก่อนสลับไปหน้าแอป (เรียกหลังรหัสผ่านถูกเท่านั้น)
   const login = async (username: string, password: string, beforeEnter?: () => Promise<void>) => {
     const r = await api<LoginResult>('/auth/login', { method: 'POST', body: { username, password } });
+    clearDrafts();
     setToken(r.token);
     if (beforeEnter) await beforeEnter().catch(() => undefined);
     setUser(r.user);
@@ -54,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await api('/auth/logout', { method: 'POST' });
     } finally {
+      clearDrafts();
       setToken('');
       setUser(null);
     }

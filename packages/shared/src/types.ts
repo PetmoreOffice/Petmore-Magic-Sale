@@ -450,6 +450,7 @@ export interface PickCheck {
  */
 export interface PickCheckInput {
   requestId: string;
+  lockToken: string;
   /** ไม่ใช้แล้ว เซิร์ฟเวอร์ใส่ชื่อบัญชีผู้ตรวจเอง */
   pickerName?: string;
   note: string;

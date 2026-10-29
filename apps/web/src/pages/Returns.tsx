@@ -23,6 +23,7 @@ import { defaultPack, formatQty } from '@/lib/packs';
 import { scrollToStart, touchInput } from '@/lib/touch';
 import { api, ApiError, formatTime, newRequestId } from '../api';
 import { useAuth } from '../auth';
+import { createDraftStore, draftKeyFor } from '@/lib/drafts';
 
 type Condition = 'good' | 'damaged';
 
@@ -47,7 +48,7 @@ interface Draft {
   requestId: string;
 }
 // เก็บใบคืนที่ทำค้างไว้ ออกไปหน้าอื่นแล้วกลับมาทำต่อได้ (ไม่เขียนลงเครื่อง) key = order:<เลขออเดอร์> หรือ free
-const drafts = new Map<string, Draft>();
+const drafts = createDraftStore<Draft>();
 
 const num = (v: string | undefined) => {
   const n = Number(v ?? '');
@@ -118,7 +119,8 @@ export function ReturnsPage() {
     return () => { live = false; };
   }, [mode, saved, query, page]);
 
-  const draftKey = mode === 'order' && order ? `order:${order.id}` : mode === 'free' ? 'free' : '';
+  const documentKey = mode === 'order' && order ? `order:${order.id}` : mode === 'free' ? 'free' : '';
+  const draftKey = documentKey ? draftKeyFor(user?.id ?? '', documentKey) : '';
   useEffect(() => { if (draftKey && !saved) drafts.set(draftKey, draft); }, [draftKey, draft, saved]);
 
   function reset() {
@@ -138,7 +140,7 @@ export function ReturnsPage() {
       setOrder(o);
       // ตั้ง ref ทันที สแกนของต่อได้เลยโดยไม่ต้องรอ render
       // หน่วยอาจเปลี่ยนถ้าตรวจของเบิกใหม่ (หน่วยที่สั่ง ↔ ชิ้น) ใช้หน่วยจากยอดเบิกล่าสุดเสมอ
-      const kept = drafts.get(`order:${o.id}`);
+      const kept = drafts.get(draftKeyFor(user?.id ?? '', `order:${o.id}`));
       draftRef.current = kept
         ? { ...kept, rows: kept.rows.map((r) => (r.orderLineNo === null ? r : { ...r, unit: unitOf(s, { lineNo: r.orderLineNo, unit: r.unit }) })) }
         : orderDraft(o, s);
@@ -153,7 +155,7 @@ export function ReturnsPage() {
     reset();
     setOrder(null);
     setSummary(null);
-    draftRef.current = drafts.get('free') ?? freeDraft();
+    draftRef.current = drafts.get(draftKeyFor(user?.id ?? '', 'free')) ?? freeDraft();
     setDraft(draftRef.current);
     setMode('free');
   }

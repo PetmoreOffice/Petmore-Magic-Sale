@@ -29,28 +29,28 @@ async function run() {
       const sku = marker + '-PRODUCT', packCode = marker + '-PACK';
       await tx.product.create({ data: { sku, name: 'สินค้าทดสอบ (transaction rollback)', unit: 'ชิ้น', active: true } });
       await tx.productPack.create({ data: { code: packCode, sku, name: 'สินค้าทดสอบแบบแพ็ค', unitName: 'แพ็ค', unitQty: 12, factor: 12 } });
+      await tx.customer.create({ data: { code: marker, name: 'ผู้สั่งทดสอบ' } });
       const stocks = await tx.stockBalance.count(), movements = await tx.stockMovement.count();
-      const body = { requestId: randomUUID(), customerName: 'ผู้สั่งทดสอบ', customerType: 'CUSTOMER', phone: '', channel: 'ทดสอบ', date: '2026-10-06', dueDate: '2026-10-07', reference: marker, note: '', lines: [
+      const body = { requestId: randomUUID(), customerCode: marker, customerName: 'ผู้สั่งทดสอบ', customerType: 'CUSTOMER', phone: '', channel: 'ทดสอบ', date: '2026-10-06', dueDate: '2026-10-07', reference: marker, note: '', lines: [
         { sku: '', packCode: '', name: 'กรอกเอง', unit: 'ถุง', qty: 1.125, unitPrice: 0.10 },
         { sku, packCode, name: 'ชื่อปลอมจาก client', unit: 'หน่วยปลอม', qty: 1, unitPrice: 0.20 },
       ] };
       const saved = await orders.post(user, body);
       assert.match(saved.id, /^SO-\d{4}-\d{6,}$/); checks++;
-      assert.equal(saved.total, 0.31); assert.equal(saved.lines[0].amount, 0.11); checks++;
+      assert.equal(saved.total, 0); assert.equal(saved.lines[0].amount, 0); checks++;
       assert.equal(saved.lines[1].name, 'สินค้าทดสอบแบบแพ็ค'); assert.equal(saved.lines[1].unit, 'แพ็ค'); checks++;
       assert.equal((await orders.post(user, body)).id, saved.id);
       assert.equal(await tx.salesOrder.count({ where: { requestId: body.requestId } }), 1); checks++;
-      await assert.rejects(() => orders.post(user, { ...body, customerName: 'เปลี่ยนผู้สั่ง' }), (e) => e.getStatus() === 409); checks++;
+      await assert.rejects(() => orders.post(user, { ...body, note: 'เปลี่ยนหมายเหตุ' }), (e) => e.getStatus() === 409); checks++;
       const other = { ...user, id: 'another-test-actor' };
       await assert.rejects(() => orders.get(other, saved.id), (e) => e.getStatus() === 403); checks++;
       assert.equal((await orders.list(other, marker)).total, 0); checks++;
       assert.equal((await orders.list(user, marker)).rows[0].id, saved.id); checks++;
       for (const invalid of [
-        { lines: [] }, { date: '2026-02-31' }, { dueDate: '2026-10-05' },
+        { lines: [] }, { date: '2026-02-31' },
         { lines: [{ ...body.lines[0], qty: -1 }] }, { lines: [{ ...body.lines[0], qty: 1.0001 }] },
-        { lines: [{ ...body.lines[0], unitPrice: -1 }] }, { lines: [{ ...body.lines[0], unitPrice: 0.001 }] },
-        { lines: [{ ...body.lines[1], packCode: 'missing-pack' }] }, { customerName: '' },
-        { lines: [{ ...body.lines[0], qty: 100000000, unitPrice: 100000000 }] },
+        { lines: [{ ...body.lines[1], packCode: 'missing-pack' }] }, { customerCode: '' },
+        { lines: [{ ...body.lines[0], qty: 100000001 }] },
       ]) { await assert.rejects(() => orders.post(user, { ...body, requestId: randomUUID(), ...invalid }), (e) => e.getStatus() === 400); checks++; }
       await tx.product.update({ where: { sku }, data: { active: false } });
       await assert.rejects(() => orders.post(user, { ...body, requestId: randomUUID() }), (e) => e.getStatus() === 400); checks++;

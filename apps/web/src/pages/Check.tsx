@@ -21,6 +21,7 @@ import { defaultPack, formatQty, packSizes } from '@/lib/packs';
 import { scrollToStart, touchInput } from '@/lib/touch';
 import { api, ApiError, formatTime, getToken, newRequestId } from '../api';
 import { useAuth } from '../auth';
+import { createDraftStore, draftKeyFor } from '@/lib/drafts';
 
 /** ของที่เอามาแต่ไม่ตรงกับรายการไหนในออเดอร์ */
 interface Extra {
@@ -57,7 +58,7 @@ interface Draft {
   requestId: string;
 }
 // เก็บความคืบหน้าการตรวจแต่ละออเดอร์ไว้ ออกไปหน้าอื่นแล้วกลับมานับต่อได้ (ไม่เขียนลงเครื่อง)
-const drafts = new Map<string, Draft>();
+const drafts = createDraftStore<Draft>();
 const emptyDraft = (): Draft => ({ counts: {}, subs: {}, manual: {}, extras: [], note: '', requestId: newRequestId() });
 
 const num = (v: string | undefined) => {
@@ -125,12 +126,14 @@ const TABS: { key: CheckFilter; label: string; tone: Tone; empty: string }[] = [
  * สแกนทีละชิ้นหรือกด −/+ พิมพ์จำนวนเอง บาร์โค้ดหลายตัวของขนาดเดียวกันนับรวมกัน หยิบผิดขนาด/ของนอกออเดอร์แยกเป็นรายการแดง
  */
 /** ปล่อยล็อกตรวจ (ปิดหน้า/เปลี่ยนออเดอร์) ไม่รอผล keepalive = ส่งได้แม้กำลังปิดแท็บ */
-function releaseLock(id: string) {
-  fetch(`/api/orders/${encodeURIComponent(id)}/check-lock`, { method: 'DELETE', keepalive: true, headers: { Authorization: `Bearer ${getToken()}` } }).catch(() => undefined);
+function releaseLock(id: string, token: string) {
+  fetch(`/api/orders/${encodeURIComponent(id)}/check-lock?lockToken=${encodeURIComponent(token)}`, { method: 'DELETE', keepalive: true, headers: { Authorization: `Bearer ${getToken()}` } }).catch(() => undefined);
 }
 
 export function CheckPage() {
   const { user } = useAuth();
+  const [lockToken] = useState(newRequestId);
+  const userDraftKey = (id: string) => draftKeyFor(user?.id ?? '', id);
   const [order, setOrder] = useState<SalesOrder | null>(null);
   // มีคนอื่นเปิดตรวจออเดอร์นี้อยู่: ตรวจทับไม่ได้ (รับช่วงต่อได้)
   const [locked, setLocked] = useState<{ byName: string } | null>(null);
@@ -212,29 +215,29 @@ export function CheckPage() {
   }, [order, query, page, tab, refreshTick]);
 
   // จำความคืบหน้าของออเดอร์ที่กำลังตรวจ
-  useEffect(() => { if (order && !result) drafts.set(order.id, draft); }, [order, draft, result]);
+  useEffect(() => { if (order && !result && user) drafts.set(draftKeyFor(user.id, order.id), draft); }, [order, draft, result, user?.id]);
 
   // ระหว่างตรวจ: ส่งสัญญาณทุก 1 นาทีว่ายังตรวจอยู่ (ล็อกไม่หลุด) ปิดแท็บ = ปล่อยล็อก
   const orderId = order?.id;
   useEffect(() => {
     if (!orderId || locked || result) return;
     const beat = () => {
-      api<SalesOrder>(`/orders/${encodeURIComponent(orderId)}/check-lock`, { method: 'POST', body: {} })
+      api<SalesOrder>(`/orders/${encodeURIComponent(orderId)}/check-lock`, { method: 'POST', body: { lockToken } })
         .catch((e) => { if (e instanceof ApiError && e.status === 409) void showLocked(orderId, errorText(e)); });
     };
     const timer = setInterval(beat, 60_000);
-    const leave = () => releaseLock(orderId);
+    const leave = () => releaseLock(orderId, lockToken);
     window.addEventListener('pagehide', leave);
     return () => { clearInterval(timer); window.removeEventListener('pagehide', leave); };
-  }, [orderId, locked, result]);
+  }, [orderId, locked, result, lockToken]);
   // ออกจากหน้าตรวจไปเมนูอื่น: ปล่อยล็อกของออเดอร์ที่เปิดค้าง
-  useEffect(() => () => { const o = orderRef.current; if (o && !lockedRef.current) releaseLock(o.id); }, []);
+  useEffect(() => () => { const o = orderRef.current; if (o && !lockedRef.current) releaseLock(o.id, lockToken); }, [lockToken]);
 
   /** ขอล็อกตรวจ force = รับช่วงต่อจากคนที่ค้างไว้ */
   async function claim(id: string, force = false) {
     try {
-      const fresh = await api<SalesOrder>(`/orders/${encodeURIComponent(id)}/check-lock`, { method: 'POST', body: { force } });
-      if (orderRef.current?.id !== id) return releaseLock(id);
+      const fresh = await api<SalesOrder>(`/orders/${encodeURIComponent(id)}/check-lock`, { method: 'POST', body: { force, lockToken } });
+      if (orderRef.current?.id !== id) return releaseLock(id, lockToken);
       setOrder(fresh); setLocked(null); setTakeover(false);
       if (force) setMessage({ kind: 'info', text: `รับช่วงตรวจ ${id} แล้ว สแกนต่อได้เลย` });
     } catch (e) {
@@ -257,13 +260,13 @@ export function CheckPage() {
   }
 
   function openOrder(o: SalesOrder) {
-    if (orderRef.current && orderRef.current.id !== o.id && !lockedRef.current) releaseLock(orderRef.current.id);
+    if (orderRef.current && orderRef.current.id !== o.id && !lockedRef.current) releaseLock(orderRef.current.id, lockToken);
     orderRef.current = o;
     setLocked(null); setTakeover(false);
     void claim(o.id);
     setOpened((old) => (old.has(o.id) ? old : new Set([...old, o.id])));
     setOrder(o);
-    const kept = drafts.get(o.id);
+    const kept = drafts.get(userDraftKey(o.id));
     setDraft(kept ? { ...emptyDraft(), ...kept } : emptyDraft());
     setResult(null);
     setMessage(null);
@@ -273,7 +276,7 @@ export function CheckPage() {
   }
 
   function closeOrder() {
-    if (order && !locked && !result) releaseLock(order.id);
+    if (order && !locked && !result) releaseLock(order.id, lockToken);
     setLocked(null); setTakeover(false);
     setOrder(null);
     setResult(null);
@@ -430,6 +433,7 @@ export function CheckPage() {
         method: 'POST',
         body: {
           requestId: draft.requestId,
+          lockToken,
           note: draft.note,
           shortStock,
           lines: [
@@ -443,7 +447,7 @@ export function CheckPage() {
           ],
         },
       });
-      drafts.delete(order.id);
+      drafts.delete(userDraftKey(order.id));
       setResult(saved);
       setOrder({ ...order, checkLock: null, lastCheck: { id: saved.id, status: saved.status, createdAt: saved.createdAt, pickerName: saved.pickerName } });
       window.scrollTo({ top: 0 });
@@ -458,7 +462,7 @@ export function CheckPage() {
 
   function recheck() {
     if (!order) return;
-    drafts.delete(order.id);
+    drafts.delete(userDraftKey(order.id));
     setDraft(emptyDraft());
     setResult(null);
     setLastLine(null);

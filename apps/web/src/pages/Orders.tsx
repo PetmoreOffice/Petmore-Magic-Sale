@@ -21,6 +21,7 @@ import { cartLineShown, formatQty, toOrderLine, type CartLine } from '@/lib/pack
 import { scrollToStart, touchInput } from '@/lib/touch';
 import { api, newRequestId, todayIso } from '../api';
 import { useAuth } from '../auth';
+import { createDraftStore } from '@/lib/drafts';
 
 const errorMessage = (e: unknown): Message => ({ kind: 'error', text: e instanceof Error ? e.message : String(e) });
 /** รหัสที่แสดงของรายการ: SKU จากทะเบียน หรือรหัสที่กรอกเอง */
@@ -32,7 +33,7 @@ interface Draft {
   reference: string; note: string; lines: CartLine[]; requestId: string;
 }
 // Keep each user's draft across in-app navigation without persisting personal data to disk.
-const drafts = new Map<string, Draft>();
+const drafts = createDraftStore<Draft>();
 
 export function OrdersPage() {
   const { has, user } = useAuth();
